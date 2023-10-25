@@ -1,0 +1,57 @@
+{% extends 'core/base_generic.html' %}
+{% load static %}
+
+
+{% block extra_css %}
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css">
+{% endblock %}
+
+{% block content %}
+<h1>Sessions List</h1>
+<a href="{% url 'create_medsession' %}" class="btn btn-primary mb-3">Add New Session</a>
+
+<!-- Filter form -->
+<form method="get">
+  {{ medsession_filter.form.as_p }}
+  <button type="submit" class="btn btn-primary">Filter</button>
+</form>
+
+<table class="table table-striped">
+    <thead>
+      <tr>
+        <th>Year</th>
+        <th>Term</th>
+        <th>Day</th>
+        <th>Room</th>
+        <th>Course</th>
+        <th>Lecturer</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for medsession in medsession_filter.qs %}
+        <tr>
+          <td>{{ medsession.year }}</td>
+          <td>{{ medsession.term }}</td>
+          <td>{{ medsession.day }}</td>
+          <td>{{ medsession.room }}</td>
+          <td>{{ medsession.course }}</td>
+          <td>{{ medsession.lecturer }}</td>
+          <td>
+            {% if medsession.sessionid %}
+              <a href="{% url 'medsession_edit' medsession.sessionid %}">Edit</a> | 
+              <a href="{% url 'medsession_delete' medsession.sessionid %}">Delete</a>
+              <a href="{% url 'medsession_persons' medsession.sessionid %}" class="btn btn-info">Details</a>
+            {% else %}
+              <!-- Handle the case where medsession.id is None or an empty string -->
+            {% endif %}
+          </td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="7">No medsessions yet.</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}

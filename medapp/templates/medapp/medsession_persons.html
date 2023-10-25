@@ -1,0 +1,227 @@
+{% extends 'core/base_generic.html' %}
+
+{% block content %}
+
+<div class="row">
+    <!-- Session Details Column -->
+    <div class="col-lg-6">
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5 class="card-title">Session Details</h5>
+        </div>
+        <div class="card-body">
+            <p><strong>Year:</strong> {{ medsession.get_year_display }}</p>
+            <p><strong>Term:</strong> {{ medsession.get_term_display }}</p>
+            <p><strong>Day:</strong> {{ medsession.day }}</p>        
+            <p><strong>Room:</strong> {{ medsession.room }}</p>
+            <p><strong>Period:</strong> {{ medsession.get_period_display }}</p>
+            <p><strong>Course:</strong> {{ medsession.course }}</p>
+            <p><strong>Lecturer:</strong> {{ medsession.lecturer }}</p>
+            <p><strong>Last Modified:</strong> {{ medsession.modifytime }}</p>
+        </div>
+      </div>
+    </div>
+  
+    <!-- Session Images Column -->
+    <div class="col-lg-6">
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5 class="card-title">Session Images</h5>
+        </div>
+        <div class="card-body">
+          {% for image_path in image_paths %}
+          <a href="{{ image_path }}" target="_blank">
+            <img src="{{ image_path }}" alt="Session Image" style="width:200px;">
+          </a>
+          {% empty %}
+          <p class="text-center text-muted">No images found for this medsession.</p>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- <a href="{% url 'medsession_pdf' medsession.sessionid %}" class="btn btn-primary">Download as PDF</a> -->
+
+  <!-- Export to Excel Button -->
+    <a href="{% url 'export_medsessionpersons' medsession.sessionid %}" target="_blank" class="btn btn-primary mb-3">
+        <i class="fas fa-file-excel"></i> Export to Excel
+    </a>
+
+    <!-- Add Person Button -->
+    <button type="button" class="btn btn-primary mb-3" data-toggle="modal" data-target="#addPersonModal">
+        <i class="fas fa-user-plus"></i> Add Person
+    </button>
+  
+  <!-- Add Person Modal -->
+  <div class="modal fade" id="addPersonModal" tabindex="-1" role="dialog" aria-labelledby="addPersonModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="addPersonModalLabel">Add Person</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+        <form id="addPersonForm" action="{% url 'add_person' %}">
+            <!-- corrected_label dropdown field -->
+            <div class="form-group">
+                <label for="corrected_label">Corrected Label</label>
+                <select class="form-control" id="corrected_label" name="corrected_label" required>
+                    {% for student in students %}
+                        <option value="{{ student.label }}">{{ student.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <!-- medsession_id input field (hidden) -->
+            <input type="hidden" id="medsession_id" name="medsession_id" value="{{ medsession.sessionid }}">
+        
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                <button type="submit" class="btn btn-primary">Add Person</button>
+            </div>
+        </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Persons Grid -->
+<div class="table-responsive">
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Detected</th>
+                <th>Personal Photo</th>
+                <th>Registration Number</th>
+                <th>Name</th>
+                <!-- Add more columns headers as needed -->
+                <th>By</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for person in persons|dictsort:"name" %}
+            
+                <tr>
+                    <td>
+                        <img src="{{ person.image_url }}" alt="{{ person.elected_label }}" style="width:80px;">
+                    </td>
+                    <td>
+                        {% if person.personal_photo_url %}
+                            <img src="{{ person.personal_photo_url }}" alt="{{ person.elected_label }}" style="width:80px;">
+                        {% endif %}
+                    </td>
+                    <td>
+                        {{ person.registration }}
+                    </td>
+                    <td>
+                        {{ person.name }}
+                    </td>
+                    <!-- Added By Column -->
+                    <td>
+                        {% if person.added_by == '0' %}
+                            AI
+                        {% elif person.added_by == '1' %}
+                            Manual
+                        {% else %}
+                            Unknown
+                        {% endif %}
+                    </td>
+                    <!-- Add more columns data as needed -->
+                    <td>
+                        <!-- Action Button -->
+                        <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#correctModal{{ person.id }}">
+                            Correct
+                        </button>
+    
+                        <!-- Modal -->
+                        <div class="modal fade" id="correctModal{{ person.id }}" tabindex="-1" role="dialog" aria-labelledby="correctModalLabel{{ person.id }}" aria-hidden="true">
+                            <div class="modal-dialog" role="document">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title" id="correctModalLabel{{ person.id }}">Correct Person</h5>
+                                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                            <span aria-hidden="true">&times;</span>
+                                        </button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <form id="correctForm{{ person.id }}" action="{% url 'correct_person' person.id %}">
+                                            <select name="corrected_label">
+                                                {% for student in students %}
+                                                    <option value="{{ student.label }}">{{ student.label }}</option>
+                                                {% endfor %}
+                                            </select>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                                                <button type="submit" class="btn btn-primary">Save changes</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td colspan="4" class="text-center text-muted">No persons found for this medsession.</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+<script>
+
+$(document).ready(function() {
+    //...
+    
+    // Handle the submission of the add person form
+    $('#addPersonForm').on('submit', function(e) {
+        e.preventDefault();
+        var form = $(this);
+        var url = form.attr('action');
+    
+        $.ajax({
+        type: 'POST',
+        url: url,
+        data: form.serialize(),
+        success: function(data) {
+            alert(data.message);
+            $('#addPersonModal').modal('hide');
+            location.reload();
+        }
+        });
+    });
+    });
+
+$(document).ready(function() {
+    $('[id^=correctForm]').on('submit', function(e) {
+        e.preventDefault();
+        var form = $(this);
+        var url = form.attr('action');
+        var modalId = '#correctModal' + form.attr('id').replace('correctForm', '');
+
+        $.ajax({
+            type: 'POST',
+            url: url,
+            data: form.serialize(), // serializes the form's elements.
+            success: function(data)
+            {
+                alert(data.message); // show response from the server.
+                
+                // Close the modal
+                $(modalId).modal('hide');
+
+                // Refresh the page
+                location.reload();
+            }
+        });
+    });
+});
+</script>
+
+{% endblock %}
+

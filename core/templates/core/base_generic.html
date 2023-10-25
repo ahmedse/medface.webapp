@@ -1,0 +1,35 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>My Django App</title>
+    <link rel="stylesheet" type="text/css" href="{% static 'core/styles.css' %}">
+    <!-- Bootstrap CSS -->
+    <!-- <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"> -->
+    <!-- Add Bootstrap CSS -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+
+    <!-- Add Font Awesome CSS -->
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css">
+
+    <!-- Add your other head elements and CSS includes here -->
+</head>
+<body>
+    {% include 'core/header.html' %}
+
+    <main class="container">
+        {% block content %}
+        <!-- Content goes here -->
+        {% endblock %}
+    </main>
+
+    {% include 'core/footer.html' %}
+
+    <!-- jQuery and Bootstrap Bundle (includes Popper) -->
+    {% comment %} <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script> {% endcomment %}
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
+</body>
+</html>
