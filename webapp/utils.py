@@ -12,72 +12,51 @@ from PIL import Image
 import logging
 logger = logging.getLogger(__name__)
 from PIL import ExifTags
+from PIL import Image
+from PIL.ExifTags import TAGS
 from pillow_heif import register_heif_opener
 from .ai import resnet50_model, senet50_model, vgg16_model, w_detect_face, class_labels
 register_heif_opener()
-
+from typing import Tuple, Union, Optional
 import ast
 
-def process_image(image_path, box, save_path, size=(300, 500)):
-    # print(f"[DEBUG] src image: {image_path}")
-    # print(f"[DEBUG] save extracted face: {save_path}")
-
+def save_face_from_src(image_path: str, box: str, save_path: str, size: Tuple[int, int] = (300, 500), margins: Tuple[int, int] = (50, 50)) -> Optional[Image.Image]:
     # Check if the image file exists
     if not os.path.isfile(image_path):
         logging.error(f"Image file does not exist: {image_path}")
         return None
-
-    try:
-        # Open image and convert it to RGB
-        img = Image.open(image_path).convert("RGB")
-    except Exception as e:
-        logging.error(f"Failed to open and convert image: {e}")
-        return None
-
-    logging.info(f"Successfully loaded image: {image_path}")
-
     # Parse the box string into a list of integers
     try:
-        box = ast.literal_eval(box)
+        x, y, w, h = ast.literal_eval(box)
     except ValueError as e:
         logging.error(f"Failed to parse box string: {e}")
         return None
-
     logging.info(f"Parsed box: {box}")
-
     # Calculate box coordinates with margin
+    x1 = max(0, x - margins[0])  # Ensure x1 is not less than 0
+    y1 = max(0, y - margins[1])  # Ensure y1 is not less than 0
+    x2 = x + w + margins[0]  
+    y2 = y + h + margins[1]  
     try:
-        box = [box[0]-10, box[1]-10, box[0]+box[2]+10, box[1]+box[3]+10]
+        with Image.open(image_path).convert("RGB") as img:
+            # Make sure x2 and y2 do not exceed image dimensions
+            x2 = min(img.width, x2)  # Ensure x2 is not more than image width
+            y2 = min(img.height, y2)  # Ensure y2 is not more than image height
+            logging.info(f"Calculated box coordinates: {(x1, y1, x2, y2)}")
+            # Crop image
+            img_cropped = img.crop((x1, y1, x2, y2))
+            logging.info(f"Cropped image size: {img_cropped.size}")
+            # Resize image
+            img_resized = img_cropped.resize(size)
+            logging.info(f"Resized image size: {img_resized.size}")
+            # Save resized image
+            img_resized.save(save_path)
+            logging.info(f"Successfully processed and saved image: {save_path}")
+            return img_resized
     except Exception as e:
-        logging.error(f"Failed to calculate box coordinates: {e}")
+        logging.error(f"Failed to process image: {e}")
         return None
 
-    logging.info(f"Calculated box coordinates: {box}")
-
-    # Crop image
-    try:
-        img_cropped = img.crop(box)
-    except Exception as e:
-        logging.error(f"Failed to crop image: {e}")
-        return None
-
-    logging.info(f"Cropped image size: {img_cropped.size}")
-
-    # Resize image
-    img_resized = img_cropped.resize(size)
-    logging.info(f"Resized image size: {img_resized.size}")
-
-    try:
-        img_resized.save(save_path)
-    except Exception as e:
-        logging.error(f"Failed to save image: {e}")
-        return None
-
-    logging.info(f"Successfully processed and saved image: {save_path}")
-    return img_resized
-
-from PIL import Image
-from PIL.ExifTags import TAGS
 
 def correct_image_orientation(image_path):
     try:   

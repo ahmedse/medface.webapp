@@ -26,6 +26,172 @@ from django.views.decorators.csrf import csrf_exempt
 from .models import Person
 import pandas as pd
 import io
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
+from django.http import Http404
+
+def get_image_url(image_path):    
+    """Return the URL of an image given its file path."""
+    image_url = settings.MEDIA_URL + os.path.relpath(image_path, settings.MEDIA_ROOT).replace("\\", "/") 
+    return image_url
+
+def get_medsession_images_dir(medsession):
+    """Return the directory where the images for a given medsession are stored."""
+    images_dir = os.path.join(
+        settings.MEDIA_ROOT, 
+        'runs', 
+        str(medsession.year), 
+        str(medsession.term), 
+        str(medsession.day), 
+        str(medsession.period), 
+        str(medsession.room)
+    )
+    return images_dir
+
+def get_medsession_images(medsession):    
+    # Calculate medsession path
+    medsession_dir = get_medsession_images_dir(medsession)
+    # List to hold all image URLs and paths
+    image_data = []
+    try:
+        # List all files in the directory        
+        for filename in os.listdir(medsession_dir):
+            # Construct the file path
+            file_path = os.path.join(medsession_dir, filename)
+            # Only add jpg and png files
+            if os.path.isfile(file_path) and file_path.lower().endswith(('.jpg', '.jpeg', '.png')):
+                # Construct the URL
+                file_url = get_image_url(file_path)              
+                # Construct the image path as sessionid/filename
+                image_path = f"{medsession.sessionid}_{filename}"                    
+                # Add the data to the list
+                image_data.append({
+                    'url': file_url,
+                    'image_path': image_path
+                })                
+                
+    except FileNotFoundError:
+        # Handle the error if the medsession directory does not exist
+        raise Http404("Medsession directory does not exist.")
+    except PermissionError:
+        # Handle the error if there are insufficient permissions to read the directory or a file
+        raise Http404("Insufficient permissions to read the medsession directory or a file.")
+    except Exception as e:
+        # Handle all other exceptions
+        logger.error("An error occurred while reading the medsession directory: %s", str(e))
+        raise Http404("An error occurred while reading the medsession directory.")
+    # Return the list of image URLs and paths
+    return image_data
+
+def get_label(person):
+    """Return the corrected_label if it exists, otherwise return the elected_label."""
+    return person.corrected_label if person.corrected_label else person.elected_label
+
+def get_personal_photo_url(label):
+    """Return the URL of the personal photo for a given label, or None if no such photo exists."""
+    personal_photo_dir = os.path.join(settings.MEDIA_ROOT, 'y3.personal', label)
+    try:
+        personal_photo_files = os.listdir(personal_photo_dir)
+    except FileNotFoundError:
+        personal_photo_files = []
+
+    if personal_photo_files:
+        personal_photo_path = os.path.join(personal_photo_dir, personal_photo_files[0])
+        personal_photo_url = get_image_url(personal_photo_path)
+    else:
+        personal_photo_url = None
+
+    return personal_photo_url
+
+def get_person_image_url(medsession, label, image_path, box):
+    """Return the URL of the person image, processing and saving the image if necessary."""
+    temp_dir = os.path.join(settings.MEDIA_ROOT, "temp")
+    os.makedirs(temp_dir, exist_ok=True)
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg", prefix=f"{label}_", dir=temp_dir) as temp_file:
+        save_path = temp_file.name
+
+    src_face_path = os.path.join(get_medsession_images_dir(medsession), image_path)
+    u.save_face_from_src(src_face_path, box, save_path)
+
+    return get_image_url(save_path)
+
+def medsession_persons(request, medsession_id):
+    # print(f"[DEBUG] inside medsession_persons: {medsession_id}")
+    logger.debug("Getting medsession with sessionid %s", medsession_id)
+    medsession = get_object_or_404(Medsession, sessionid=medsession_id)
+    logger.debug("Found medsession: %s", medsession)
+    logger.debug("Getting persons for medsession %s", medsession)
+    persons = MedsessionPerson.objects.filter(medsession=medsession)
+    logger.debug("Found persons: %s", persons)
+    students = Person.objects.all().order_by('fullname')
+
+    # Get the images for the medsession
+    src_image_data = get_medsession_images(medsession)
+    logger.info(f"src_image_data: {src_image_data}")
+    # print(f"[DEBUG] src_image_data: {src_image_data}")
+
+    for person in persons:
+        label = get_label(person)
+        registration, name = label.split('_')
+        person.registration = registration
+        person.name = name
+        person.personal_photo_url = get_personal_photo_url(label)
+
+        if not person.image_url:
+            person.image_url = get_person_image_url(medsession, label, person.image_path, person.box)
+
+        person.added_by = '1' if person.corrected_label else '0'
+        person.save()
+        
+        # print(f"[DEBUG] medsession.sessionid = {medsession.sessionid}")
+    return render(request, 'medapp/medsession_persons.html', {'src_image_data': src_image_data, 'medsession': medsession, 'persons': persons, 'students': students})
+
+
+@csrf_exempt
+@require_POST
+def delete_image(request, image_path):    
+    try:
+        # Split the image_path into medsession_id and image_name
+        medsession_id, image_name = image_path.split('_', 1)        
+        # Get the Medsession object
+        medsession = get_object_or_404(Medsession, sessionid=medsession_id)
+        print(f"[DEBUG] medsession: {medsession}")
+        # Get the directory of the image
+        image_dir = get_medsession_images_dir(medsession)        
+        # Construct the full path of the image
+        full_image_path = os.path.join(image_dir, image_name)
+        # Check if the file exists
+        if not os.path.isfile(full_image_path):
+            return JsonResponse({'error': 'File does not exist'}, status=400)
+        # Delete the file
+        os.remove(full_image_path)
+        return JsonResponse({'message': 'Image deleted'})
+    except Medsession.DoesNotExist:
+        return JsonResponse({'error': 'Medsession not found'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+from django.core.files.storage import FileSystemStorage
+@csrf_exempt
+@require_POST
+def upload_image(request):
+    
+    try:
+        medsession_id = request.POST['medsession_id']
+        print(f"[DEBUG] medsession_id: {medsession_id}")
+        medsession = get_object_or_404(Medsession, sessionid=medsession_id)
+        
+        # Ensure an image file was uploaded
+        if 'image' not in request.FILES:
+            return JsonResponse({'error': 'No image file uploaded'}, status=400)
+        image_file = request.FILES['image']
+        fs = FileSystemStorage(location=get_medsession_images_dir(medsession))
+        filename = fs.save(image_file.name, image_file)
+        return JsonResponse({'message': 'Image uploaded'})
+    except Medsession.DoesNotExist:
+        return JsonResponse({'error': 'Medsession not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)    
 
 def export_medsessionpersons(request, sessionid):
     # Fetch the medsession
@@ -242,76 +408,6 @@ def build_medsessions_persons(medsession, persons, image_paths):
             image_url = settings.MEDIA_URL + os.path.relpath(save_path, settings.MEDIA_ROOT).replace("\\", "/")
             person.image_url = image_url
 
-
-def medsession_persons(request, medsession_id):
-    logger.debug("Getting medsession with sessionid %s", medsession_id)
-    medsession = get_object_or_404(Medsession, sessionid=medsession_id)
-    logger.debug("Found medsession: %s", medsession)
-    logger.debug("Getting persons for medsession %s", medsession)
-    persons = MedsessionPerson.objects.filter(medsession=medsession)
-    logger.debug("Found persons: %s", persons)
-    students = Person.objects.all().order_by('fullname')
-
-    # Split the elected_label into registration and name for each person
-    image_paths = set()
-    persons_with_photos = []
-    for person in persons:
-        # Use corrected_label if it exists, otherwise use elected_label
-        label = person.corrected_label if person.corrected_label else person.elected_label
-        registration, name = label.split('_')
-        person.registration = registration
-        person.name = name
-        
-        # Create the path to the directory where the person's personal photos are stored
-        personal_photo_dir = os.path.join(settings.MEDIA_ROOT, 'y3.personal', '{}'.format(label))
-        try:
-            personal_photo_files = os.listdir(personal_photo_dir)
-        except FileNotFoundError:
-            personal_photo_files = []
-            
-        if personal_photo_files:
-            personal_photo_path = os.path.join(personal_photo_dir, personal_photo_files[0])
-            personal_photo_url = settings.MEDIA_URL + os.path.relpath(
-                personal_photo_path, 
-                settings.MEDIA_ROOT
-            ).replace("\\", "/")
-        else:
-            personal_photo_url = None
-        person.personal_photo_url = personal_photo_url
-        
-        image_path = os.path.join(settings.MEDIA_ROOT, 'runs', str(medsession.year)
-                            , str(medsession.term), str(medsession.day)
-                            , str(medsession.period), str(medsession.room)
-                            , str(person.image_path))
-            
-        image_url = settings.MEDIA_URL + os.path.relpath(image_path, settings.MEDIA_ROOT).replace("\\", "/")
-        image_paths.add(image_url)
-
-        # Check if the person already has an image_url
-        if not person.image_url:
-            # Generate a unique temporary save path
-            temp_dir = os.path.join(settings.MEDIA_ROOT, "temp")   
-            # Create the temp directory if it does not exist
-            os.makedirs(temp_dir, exist_ok=True)        
-            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg", prefix=f"{label}_", dir=temp_dir)
-            save_path = temp_file.name
-            temp_file.close()
-
-            # Process the image
-            u.process_image(image_path, person.box, save_path)  # assuming person.box has the bounding box coordinates
-
-            # Generate the image URL
-            image_url = settings.MEDIA_URL + os.path.relpath(save_path, settings.MEDIA_ROOT).replace("\\", "/")
-            person.image_url = image_url
-        
-        # Set added_by field based on whether the corrected_label exists or not
-        person.added_by = '1' if person.corrected_label else '0'
-
-        person.save()
-        
-        # print(f"[DEBUG] medsession.sessionid = {medsession.sessionid}")
-
-    return render(request, 'medapp/medsession_persons.html', {'persons': persons, 'medsession': medsession, 'image_paths': list(image_paths), 'students': students})
 
 # ... your other views ...
 
