@@ -57,7 +57,6 @@ def save_face_from_src(image_path: str, box: str, save_path: str, size: Tuple[in
         logging.error(f"Failed to process image: {e}")
         return None
 
-
 def correct_image_orientation(image_path):
     try:   
         with Image.open(image_path) as image:

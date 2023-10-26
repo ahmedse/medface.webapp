@@ -18,6 +18,7 @@
             <p><strong>Course:</strong> {{ medsession.course }}</p>
             <p><strong>Lecturer:</strong> {{ medsession.lecturer }}</p>
             <p><strong>Last Modified:</strong> {{ medsession.modifytime }}</p>
+            <p><strong>Students Detected in Photos:</strong> {{ persons.count }}</p>
         </div>
       </div>
     </div>
@@ -46,18 +47,26 @@
             <button id="upload-image-button">Upload</button>
         </div>
         </div>
+        <button id="reprocess-button">Reprocess Images</button>
     </div>
     </div>
-    <button id="reprocess-button">Reprocess Images</button>
-    
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script>
+   
+    <!-- Full-page overlay and spinner -->
+    <div id="overlay" style="display: none; position: fixed; width: 100%; height: 100%; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.5); z-index: 2; cursor: pointer;">
+        <div style="position: absolute; top: 50%; left: 50%; font-size: 50px; color: white;">
+            <i class="fa fa-spinner fa-spin"></i>
+        </div>
+    </div>
+
+<script>
     $('#reprocess-button').click(function() {
+        // Show the overlay and spinner
+        $('#overlay').show();    
         $.ajax({
             url: '/reprocess_images/',
             method: 'POST',
             data: {
-                'session_id': $('#session-id').val()
+                'medsession_id': $('#medsession-id').val()
             },
             headers: {'X-CSRFToken': '{{ csrf_token }}'},
             success: function() {
@@ -65,10 +74,17 @@
             },
             error: function() {
                 alert('Error reprocessing images');
+            },
+            complete: function() {
+                // Hide the overlay and spinner
+                $('#overlay').hide();
             }
         });
     });
-
+    </script>
+       
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
 
     $(document).ready(function() {
         $('.delete-image').click(function() {

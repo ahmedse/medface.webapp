@@ -3,7 +3,7 @@ from .views import create_medsession, create_person, PersonListView, MedsessionL
 from . import views 
 from django.conf import settings
 from django.conf.urls.static import static
-from .views import upload_image, delete_image, medsession_persons, download_pdf, correct_person, add_person
+from .views import reprocess_images, upload_image, delete_image, medsession_persons, download_pdf, correct_person, add_person
 
 urlpatterns = [
     path('medsession_list/', MedsessionListView.as_view(), name='medsession_list'),
@@ -18,6 +18,7 @@ urlpatterns = [
     path('export_medsessionpersons/<int:sessionid>/', views.export_medsessionpersons, name='export_medsessionpersons'),
     path('delete_image/<str:image_path>/', views.delete_image, name='delete_image'),
     path('upload_image/', views.upload_image, name='upload_image'),
+    path('reprocess_images/', reprocess_images, name='reprocess_images'),
        
     path('create_person/', create_person, name='create_person'),
     path('person_list/', PersonListView.as_view(), name='person_list'),

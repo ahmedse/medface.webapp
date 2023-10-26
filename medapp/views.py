@@ -146,6 +146,37 @@ def medsession_persons(request, medsession_id):
         # print(f"[DEBUG] medsession.sessionid = {medsession.sessionid}")
     return render(request, 'medapp/medsession_persons.html', {'src_image_data': src_image_data, 'medsession': medsession, 'persons': persons, 'students': students})
 
+from django.db import transaction
+from django.shortcuts import redirect
+import traceback
+
+@csrf_exempt
+@require_POST
+def reprocess_images(request):        
+    try:
+        print(f"[DEBUG] request.POST['medsession_id']: {request.POST['medsession_id']}")
+
+        medsession_id = request.POST['medsession_id']        
+        medsession = get_object_or_404(Medsession, sessionid=medsession_id)
+        medsession_dir = get_medsession_images_dir(medsession)
+        with transaction.atomic():
+            # Delete medsession_persons related to this medsession
+            MedsessionPerson.objects.filter(medsession=medsession).delete()           
+        # Perform face recognition and create MedsessionPerson objects
+        faces_df = u.extract_faces(medsession_dir)
+        person_df = u.query_models(faces_df)
+        elected = u.elect_answer(person_df)
+        unique_persons = u.remove_duplicates(elected)
+        medsession_persons = u.create_medsession_persons(unique_persons, medsession)
+        # If everything is successful, redirect to medsession_persons view
+        return redirect('medsession_persons', medsession_id=medsession_persons[0].medsession_id)
+    except Medsession.DoesNotExist:
+        messages.error(request, 'Medsession not found')
+        return JsonResponse({'error': 'Medsession not found'}, status=404)
+    except Exception as e:
+        traceback.print_exc()  # This will print the traceback
+        messages.error(request, str(e))
+        return JsonResponse({'error': str(e)}, status=500)
 
 @csrf_exempt
 @require_POST
@@ -174,8 +205,7 @@ def delete_image(request, image_path):
 from django.core.files.storage import FileSystemStorage
 @csrf_exempt
 @require_POST
-def upload_image(request):
-    
+def upload_image(request):    
     try:
         medsession_id = request.POST['medsession_id']
         print(f"[DEBUG] medsession_id: {medsession_id}")
