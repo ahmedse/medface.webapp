@@ -4,6 +4,7 @@ from . import views
 from django.conf import settings
 from django.conf.urls.static import static
 from .views import reprocess_images, upload_image, delete_image, medsession_persons, download_pdf, correct_person, add_person
+from .views import get_task_status
 
 urlpatterns = [
     path('medsession_list/', MedsessionListView.as_view(), name='medsession_list'),
@@ -19,6 +20,8 @@ urlpatterns = [
     path('delete_image/<str:image_path>/', views.delete_image, name='delete_image'),
     path('upload_image/', views.upload_image, name='upload_image'),
     path('reprocess_images/', views.reprocess_images, name='reprocess_images'),
+    path('get_task_status/<int:medsession_id>/', views.get_task_status),
+    # path('get_task_status/<int:medsession_id>/', get_task_status, name='get_task_status'),
        
     path('create_person/', create_person, name='create_person'),
     path('person_list/', PersonListView.as_view(), name='person_list'),

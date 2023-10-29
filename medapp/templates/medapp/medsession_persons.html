@@ -5,23 +5,43 @@
 <div class="row">
     <!-- Session Details Column -->
     <div class="col-lg-6">
-      <div class="card mb-4">
-        <div class="card-header">
-          <h5 class="card-title">Session Details</h5>
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title">Session Details</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>Year:</strong> {{ medsession.get_year_display }}</p>
+                        <p><strong>Term:</strong> {{ medsession.get_term_display }}</p>
+                        <p><strong>Day:</strong> {{ medsession.day }}</p>        
+                        <p><strong>Room:</strong> {{ medsession.room }}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>Period:</strong> {{ medsession.get_period_display }}</p>
+                        <p><strong>Course:</strong> {{ medsession.course }}</p>
+                        <p><strong>Lecturer:</strong> {{ medsession.lecturer }}</p>
+                        <p><strong>Last Modified:</strong> {{ medsession.modifytime }}</p>
+                        <p><strong>Students Detected in Photos:</strong> {{ persons.count }}</p>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="card-body">
-            <p><strong>Year:</strong> {{ medsession.get_year_display }}</p>
-            <p><strong>Term:</strong> {{ medsession.get_term_display }}</p>
-            <p><strong>Day:</strong> {{ medsession.day }}</p>        
-            <p><strong>Room:</strong> {{ medsession.room }}</p>
-            <p><strong>Period:</strong> {{ medsession.get_period_display }}</p>
-            <p><strong>Course:</strong> {{ medsession.course }}</p>
-            <p><strong>Lecturer:</strong> {{ medsession.lecturer }}</p>
-            <p><strong>Last Modified:</strong> {{ medsession.modifytime }}</p>
-            <p><strong>Students Detected in Photos:</strong> {{ persons.count }}</p>
+        <!-- Task Status Column -->
+        <div class="col-lg-6" id="task-status-card" style="display: none;">
+            <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title">Task Status</h5>
+            </div>
+            <div class="card-body">
+                <p id="task-status">Status: </p>
+                <p id="task-progress">Progress: </p>
+            </div>
+            </div>
         </div>
-      </div>
     </div>
+
+
   
     <!-- Session Images Column -->
     <div class="col-lg-6">
@@ -58,29 +78,54 @@
         </div>
     </div>
 
-<script>
-    $('#reprocess-button').click(function() {
-        // Show the overlay and spinner
-        $('#overlay').show();    
-        $.ajax({
-            url: '/reprocess_images/',
-            method: 'POST',
-            data: {
-                'medsession_id': $('#medsession-id').val()
-            },
-            headers: {'X-CSRFToken': '{{ csrf_token }}'},
-            success: function() {
-                location.reload();
-            },
-            error: function() {
-                alert('Error reprocessing images');
-            },
-            complete: function() {
-                // Hide the overlay and spinner
-                $('#overlay').hide();
-            }
+    <script>
+        $('#reprocess-button').click(function() {
+            // Show the overlay and spinner
+            $('#overlay').show();
+            $('#task-status-card').show();
+    
+            $.ajax({
+                url: '/reprocess_images/',
+                method: 'POST',
+                data: {
+                    'medsession_id': $('#medsession-id').val()
+                },
+                headers: {'X-CSRFToken': '{{ csrf_token }}'},
+                success: function() {
+                    // Start polling for task status
+                    pollTaskStatus();
+                },
+                error: function() {
+                    alert('Error reprocessing images');
+                },
+                complete: function() {
+                    // Hide the overlay and spinner
+                    $('#overlay').hide();
+                }
+            });
         });
-    });
+    
+        function pollTaskStatus() {
+            var medsession_id = $('#medsession-id').val();
+            $.ajax({
+                url: '/get_task_status/' + medsession_id + '/',
+                success: function(data) {
+                    $('#task-status').text('Status: ' + data.status);
+                    $('#task-progress').text('Progress: ' + data.progress + '%');
+
+                    if (data.status == 'completed' || data.status == 'error') {
+                        // If the task is completed or there is an error, stop polling and refresh the page
+                        location.reload();
+                    } else {
+                        // If the task is not yet completed, keep polling
+                        setTimeout(pollTaskStatus, 1000);
+                    }
+                },
+                error: function() {
+                    alert('Error getting task status');
+                }
+            });
+}
     </script>
        
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -128,11 +173,11 @@
                 }
             });
         });
-    });  
-
-    
+    });     
     </script>
   
+
+
   <!-- <a href="{% url 'medsession_pdf' medsession.sessionid %}" class="btn btn-primary">Download as PDF</a> -->
 
   <!-- Export to Excel Button -->

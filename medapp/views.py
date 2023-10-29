@@ -3,7 +3,7 @@
 import os
 from django.shortcuts import render, redirect, get_object_or_404
 from .forms import MedsessionForm, PersonForm, ImageForm
-from .models import Medsession, Person, MedsessionPerson
+from .models import Medsession, Person, MedsessionPerson, TaskStatus
 from django.urls import reverse_lazy
 from django.views.generic import ListView, UpdateView, DeleteView
 from .models import Image
@@ -152,7 +152,15 @@ def medsession_persons(request, medsession_id):
 
 import redis
 import json
+from django.http import JsonResponse
 
+def get_task_status(request, medsession_id):
+    print(f"Inside get_task_status: medsession_id: {medsession_id}")
+    task_status = get_object_or_404(TaskStatus, medsession_id=medsession_id)
+    return JsonResponse({
+        'status': task_status.status,
+        'progress': task_status.progress,
+    })
 
 def publish_medsession_id_to_redis(medsession_id):
     print(f"Inside publish_medsession_id_to_redis: medsession_id: {medsession_id}")

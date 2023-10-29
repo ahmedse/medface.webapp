@@ -3,6 +3,9 @@ from django.db import models
 from django.utils import timezone
 from django.db import models
 
+
+
+
 class Medsession(models.Model):
     PERIOD_CHOICES = [(str(i), str(i)) for i in range(1, 4)]
     YEAR_CHOICES = [(str(i), str(i)) for i in range(1, 7)]
@@ -18,6 +21,13 @@ class Medsession(models.Model):
     lecturer = models.CharField(max_length=400, default='n/a')
     modifytime = models.DateTimeField(auto_now=True)
  
+class TaskStatus(models.Model):
+    medsession = models.ForeignKey(Medsession, on_delete=models.CASCADE)
+    phase = models.CharField(max_length=255)
+    status = models.CharField(max_length=255)
+    progress = models.IntegerField(default=0)
+    last_updated = models.DateTimeField(auto_now=True)
+
 def upload_to(instance, filename):
     return f'runs/{instance.medsession.year}/{instance.medsession.term}/{instance.medsession.day}/{instance.medsession.period}/{instance.medsession.room}/{filename}'
  
