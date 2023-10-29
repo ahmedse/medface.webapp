@@ -20,6 +20,7 @@ from xhtml2pdf import pisa
 from django.template.loader import get_template
 from io import BytesIO
 from django.contrib.staticfiles import finders
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 from django.http import JsonResponse, HttpResponseBadRequest, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -29,6 +30,9 @@ import io
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.http import Http404
+from django.db import transaction
+import traceback
+from django.shortcuts import redirect
 
 def get_image_url(image_path):    
     """Return the URL of an image given its file path."""
@@ -146,38 +150,76 @@ def medsession_persons(request, medsession_id):
         # print(f"[DEBUG] medsession.sessionid = {medsession.sessionid}")
     return render(request, 'medapp/medsession_persons.html', {'src_image_data': src_image_data, 'medsession': medsession, 'persons': persons, 'students': students})
 
-from django.db import transaction
-from django.shortcuts import redirect
-import traceback
+import redis
+import json
+
+
+def publish_medsession_id_to_redis(medsession_id):
+    print(f"Inside publish_medsession_id_to_redis: medsession_id: {medsession_id}")
+    u.r.publish('medsession-channel', json.dumps({'medsession_id': medsession_id}))
 
 @csrf_exempt
 @require_POST
-def reprocess_images(request):        
+def reprocess_images(request):            
+    logger.debug(f"Inside reprocess_images: request.POST['medsession_id']: {request.POST['medsession_id']}")
     try:
-        print(f"[DEBUG] request.POST['medsession_id']: {request.POST['medsession_id']}")
-
+        logger.debug(f"request.POST['medsession_id']: {request.POST['medsession_id']}")
         medsession_id = request.POST['medsession_id']        
-        medsession = get_object_or_404(Medsession, sessionid=medsession_id)
-        medsession_dir = get_medsession_images_dir(medsession)
-        with transaction.atomic():
-            # Delete medsession_persons related to this medsession
-            MedsessionPerson.objects.filter(medsession=medsession).delete()           
-        # Perform face recognition and create MedsessionPerson objects
-        faces_df = u.extract_faces(medsession_dir)
-        person_df = u.query_models(faces_df)
-        elected = u.elect_answer(person_df)
-        unique_persons = u.remove_duplicates(elected)
-        medsession_persons = u.create_medsession_persons(unique_persons, medsession)
-        # If everything is successful, redirect to medsession_persons view
-        return redirect('medsession_persons', medsession_id=medsession_persons[0].medsession_id)
+        publish_medsession_id_to_redis(medsession_id)
+        return JsonResponse({'message': f'Medsession {medsession_id} reprocessing started.'}, status=200)       
+    except KeyError as e:
+        messages.error(request, 'Medsession ID is missing in the request')
+        return JsonResponse({'error': 'Medsession ID is missing in the request'}, status=400)
     except Medsession.DoesNotExist:
         messages.error(request, 'Medsession not found')
         return JsonResponse({'error': 'Medsession not found'}, status=404)
+    except redis.exceptions.ConnectionError as e:
+        logger.error(f"Redis connection error: {str(e)}")
+        messages.error(request, "Internal error, please try again later.")
+        return JsonResponse({'error': "Internal error, please try again later."}, status=500)
     except Exception as e:
-        traceback.print_exc()  # This will print the traceback
-        messages.error(request, str(e))
-        return JsonResponse({'error': str(e)}, status=500)
+        logger.error(f"Unexpected error: {str(e)}", exc_info=True)  # This will log the traceback
+        messages.error(request, "Unexpected error, please try again later.")
+        return JsonResponse({'error': "Unexpected error, please try again later."}, status=500)
 
+
+def create_medsession(request):
+    ImageFormSet = modelformset_factory(Image, form=ImageForm, extra=6, max_num=10, min_num=1)
+
+    if request.method == "POST":
+        return handle_create_medsession_post(request, ImageFormSet)
+    else:
+        return handle_create_medsession_get(request, ImageFormSet)
+
+def handle_create_medsession_post(request, ImageFormSet):
+    form = MedsessionForm(request.POST)
+    formset = ImageFormSet(request.POST, request.FILES, queryset=Image.objects.none())
+
+    context = {'form': form, 'formset': formset}
+    if form.is_valid() and formset.is_valid():
+        medsession = form.save()
+        for image_form in formset:
+            if image_form.cleaned_data:
+                image = image_form.save(commit=False)
+                image.medsession = medsession
+                image.save()
+        try:
+            publish_medsession_id_to_redis(medsession.sessionid)
+        except ValidationError as e:
+            messages.error(request, str(e))
+            return render(request, 'create_medsession.html', context)
+        return redirect('medsession_persons', medsession_id=medsession.sessionid)
+    else:
+        logger.error(f"Form errors: {form.errors}")
+        return render(request, 'create_medsession.html', context)
+
+def handle_create_medsession_get(request, ImageFormSet):
+    form = MedsessionForm()
+    formset = ImageFormSet(queryset=Image.objects.none())
+    field_names = ['year', 'term', 'day', 'room', 'course', 'lecturer']
+    context = {'form': form, 'formset': formset, 'field_names': field_names}
+    return render(request, 'create_medsession.html', context)
+ 
 @csrf_exempt
 @require_POST
 def delete_image(request, image_path):    
@@ -348,7 +390,7 @@ def download_pdf(request, medsession_id):
     print(f"[DEBUG] inside download_pdf view: medsession.sessionid = {medsession.sessionid}")
     return render_to_pdf('medapp/medsession_persons.html', {'persons': persons, 'medsession': medsession, 'image_paths': list(image_paths)})
 
-def create_medsession(request):        
+def create_medsession_OLD(request):        
     # ImageFormSet = modelformset_factory(Image, fields=('image',), extra=3, max_num=10)
     ImageFormSet = modelformset_factory(Image, form=ImageForm, extra=6, max_num=10, min_num=1)
     if request.method == "POST":
@@ -367,21 +409,7 @@ def create_medsession(request):
                     image_paths.append(image.image.path)                
             try:    
                 # Now, perform face recognition
-                # 0- some settings                
-                medsession_dir = os.path.join(settings.MEDIA_ROOT, 'runs'
-                                              , str(medsession.year), str(medsession.term)
-                                              , str(medsession.day), str(medsession.period), str(medsession.room))
-                # 1- loop on images and extract faces and store in faces_df
-                faces_df = u.extract_faces(medsession_dir)
-                print(f'[DEBUG] {len(faces_df)}')
-                # 2- query the 3 models and store in relevant column in person_df
-                person_df = u.query_models(faces_df)
-                # 3- elect one answer by: the max agreed one, or the max whieghted by confidence.
-                elected = u.elect_answer(person_df)
-                # 4- remove duplicated persons
-                unique_persons = u.remove_duplicates(elected)
-                # 5- create medsession_person object and store in db.
-                medsession_persons = u.create_medsession_persons(unique_persons, medsession)
+                publish_medsession_id_to_redis(medsession.sessionid)
             except ValidationError as e:
                 messages.error(request, str(e))
                 return render(request, 'create_medsession.html', context)

@@ -18,7 +18,7 @@ urlpatterns = [
     path('export_medsessionpersons/<int:sessionid>/', views.export_medsessionpersons, name='export_medsessionpersons'),
     path('delete_image/<str:image_path>/', views.delete_image, name='delete_image'),
     path('upload_image/', views.upload_image, name='upload_image'),
-    path('reprocess_images/', reprocess_images, name='reprocess_images'),
+    path('reprocess_images/', views.reprocess_images, name='reprocess_images'),
        
     path('create_person/', create_person, name='create_person'),
     path('person_list/', PersonListView.as_view(), name='person_list'),
