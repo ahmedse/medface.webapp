@@ -1,10 +1,8 @@
 import os
 import warnings
 warnings.filterwarnings('ignore')
-from keras_vggface.utils import preprocess_input
 import numpy as np
 import pandas as pd
-from keras_vggface.utils import preprocess_input
 from PIL import Image
 import logging
 # Set up logging

@@ -154,17 +154,48 @@ import redis
 import json
 from django.http import JsonResponse
 
+
 def get_task_status(request, medsession_id):
     print(f"Inside get_task_status: medsession_id: {medsession_id}")
-    task_status = get_object_or_404(TaskStatus, medsession_id=medsession_id)
-    return JsonResponse({
+    task_status = TaskStatus.objects.filter(medsession_id=medsession_id).first()
+    # If no task_status found, return a default status
+    if not task_status:
+        return JsonResponse({
+            'status': 'no task',
+            'progress': 0,
+        })
+    # Prepare the response
+    response = JsonResponse({
         'status': task_status.status,
         'progress': task_status.progress,
     })
+    # If the task is complete, delete it
+    if task_status.status in ['completed', 'error']:
+        task_status.delete()        
+    return response
+
+from django.db import transaction
 
 def publish_medsession_id_to_redis(medsession_id):
     print(f"Inside publish_medsession_id_to_redis: medsession_id: {medsession_id}")
+    with transaction.atomic():
+        # Fetch task status
+        task_status = TaskStatus.objects.select_for_update().filter(medsession_id=medsession_id).first()
+        # If there's an ongoing task, don't publish and report back
+        if task_status and task_status.status not in ['completed', 'error']:
+            return JsonResponse({
+                'message': 'Task is currently running. Please wait until it is completed.',
+                'status': 'error'
+            })
+        # If a task is 'completed' or 'error', delete it
+        if task_status:
+            task_status.delete()
+    # Publish to Redis
     u.r.publish('medsession-channel', json.dumps({'medsession_id': medsession_id}))
+    return JsonResponse({
+        'message': 'Task started successfully.',
+        'status': 'success'
+    })
 
 @csrf_exempt
 @require_POST
@@ -252,6 +283,7 @@ def delete_image(request, image_path):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
+import time
 from django.core.files.storage import FileSystemStorage
 @csrf_exempt
 @require_POST
@@ -260,7 +292,7 @@ def upload_image(request):
         medsession_id = request.POST['medsession_id']
         print(f"[DEBUG] medsession_id: {medsession_id}")
         medsession = get_object_or_404(Medsession, sessionid=medsession_id)
-        
+        # time.sleep(20)
         # Ensure an image file was uploaded
         if 'image' not in request.FILES:
             return JsonResponse({'error': 'No image file uploaded'}, status=400)
@@ -343,7 +375,17 @@ def add_person(request):
     else:
         # return an error message if the method is not POST
         return JsonResponse({"message": "Invalid request method", "status": "error"})
-    
+
+@csrf_exempt
+@require_POST
+def delete_person(request):
+    person_id = request.POST.get('person_id')
+    person = get_object_or_404(MedsessionPerson, id=person_id)
+    person.delete()
+    return JsonResponse({
+        'message': 'Person deleted successfully.'
+    })
+
 @csrf_exempt
 def correct_person(request, person_id):    
     if request.method == 'POST':

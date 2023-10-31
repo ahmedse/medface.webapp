@@ -44,19 +44,19 @@
 
   
     <!-- Session Images Column -->
-    <div class="col-lg-6">
-        <div class="card mb-4">
+<div class="col-lg-6">
+    <div class="card mb-4">
         <div class="card-header">
-            <h5 class="card-title">Session Images</h5>
+            <h5 class="card-title">Session Images ({{ src_image_data|length }})</h5>
         </div>
-        <div class="card-body">
+        <div class="card-body" style="height: 300px; overflow-y: scroll;">
             {% for image in src_image_data %}
             <div>
-            <a href="{{ image.url }}" target="_blank">
-                <img src="{{ image.url }}" alt="Session Image" style="width:200px;">
-            </a>
-            <!-- Delete Image Button -->
-            <button class="delete-image" data-image-id="{{ image.image_path }}">Delete</button>
+                <a href="{{ image.url }}" target="_blank">
+                    <img src="{{ image.url }}" alt="Session Image" style="width:200px;">
+                </a>
+                <!-- Delete Image Button -->
+                <button class="delete-image" data-image-id="{{ image.image_path }}">Delete</button>
             </div>
             {% empty %}
             <p class="text-center text-muted">No images found for this session.</p>
@@ -66,10 +66,9 @@
             <input type="hidden" id="medsession-id" value="{{ medsession.sessionid }}">
             <button id="upload-image-button">Upload</button>
         </div>
-        </div>
-        <button id="reprocess-button">Reprocess Images</button>
     </div>
-    </div>
+    <button id="reprocess-button">Reprocess Images</button>
+</div>
    
     <!-- Full-page overlay and spinner -->
     <div id="overlay" style="display: none; position: fixed; width: 100%; height: 100%; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.5); z-index: 2; cursor: pointer;">
@@ -91,7 +90,11 @@
                     'medsession_id': $('#medsession-id').val()
                 },
                 headers: {'X-CSRFToken': '{{ csrf_token }}'},
-                success: function() {
+                success: function(response) {
+                    if (response.status === 'error') {
+                        alert(response.message);
+                        return;
+                    }
                     // Start polling for task status
                     pollTaskStatus();
                 },
@@ -100,7 +103,7 @@
                 },
                 complete: function() {
                     // Hide the overlay and spinner
-                    $('#overlay').hide();
+                    // $('#overlay').hide();
                 }
             });
         });
@@ -122,6 +125,7 @@
                     }
                 },
                 error: function() {
+                    $('#overlay').hide();
                     alert('Error getting task status');
                 }
             });
@@ -158,6 +162,7 @@
             var formData = new FormData();
             formData.append('image', $('#upload-image')[0].files[0]);
             formData.append('medsession_id', $('#medsession-id').val());
+            $('#overlay').show();
             $.ajax({
                 url: '/upload_image'+ '/',
                 method: 'POST',
@@ -170,6 +175,10 @@
                 },
                 error: function() {
                     alert('Error uploading image');
+                },
+                complete: function() {
+                    // Hide the overlay and spinner
+                    $('#overlay').hide();
                 }
             });
         });
@@ -273,6 +282,10 @@
                         <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#correctModal{{ person.id }}">
                             Correct
                         </button>
+                        <!-- Delete Button -->
+                        <button type="button" class="btn btn-danger delete-person" data-person-id="{{ person.id }}">
+                            Delete
+                        </button>
     
                         <!-- Modal -->
                         <div class="modal fade" id="correctModal{{ person.id }}" tabindex="-1" role="dialog" aria-labelledby="correctModalLabel{{ person.id }}" aria-hidden="true">
@@ -311,6 +324,28 @@
     </table>
 </div>
 <script>
+
+$(document).ready(function() {
+    $('.delete-person').on('click', function() {
+        var personId = $(this).data('person-id');
+        var confirmation = confirm('Are you sure you want to delete this person? This action cannot be undone.');
+
+        if (confirmation) {
+            $.ajax({
+                type: 'POST',
+                url: '{% url "delete_person" %}',
+                data: {
+                    'person_id': personId,
+                    'csrfmiddlewaretoken': '{{ csrf_token }}',
+                },
+                success: function(data) {
+                    alert(data.message);
+                    location.reload();
+                }
+            });
+        }
+    });
+});
 
 $(document).ready(function() {
     //...
