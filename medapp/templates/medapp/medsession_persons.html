@@ -36,6 +36,7 @@
             <div class="card-body">
                 <p id="task-status">Status: </p>
                 <p id="task-progress">Progress: </p>
+                <p id="task-time">Time: </p>
             </div>
             </div>
         </div>
@@ -115,21 +116,23 @@
                 success: function(data) {
                     $('#task-status').text('Status: ' + data.status);
                     $('#task-progress').text('Progress: ' + data.progress + '%');
+                    $('#task-time').text('Time: ' + data.TimeTaken + ' seconds');
 
                     if (data.status == 'completed' || data.status == 'error') {
-                        // If the task is completed or there is an error, stop polling and refresh the page
-                        location.reload();
+                        // If the task is completed or there is an error, stop polling and refresh the page after a delay
+                        setTimeout(function() {
+                            location.reload();
+                        }, 5000);  // delay of 5 seconds
                     } else {
                         // If the task is not yet completed, keep polling
-                        setTimeout(pollTaskStatus, 1000);
+                        setTimeout(pollTaskStatus, 5000);
                     }
                 },
                 error: function() {
-                    $('#overlay').hide();
                     alert('Error getting task status');
                 }
             });
-}
+        }
     </script>
        
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>

@@ -146,7 +146,7 @@ def save_face_from_src(image_path: str, box: str, save_path: str, size: Tuple[in
 
 from medapp.models import MedsessionPerson
 def create_medsession_persons(unique_persons, medsession):
-    print(unique_persons.info())
+    # print(unique_persons.info())
     print("[DEBUG] Total persons detected: ", len(unique_persons)) 
     medsession_persons = []
     for _, person in unique_persons.iterrows():

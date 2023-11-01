@@ -163,11 +163,13 @@ def get_task_status(request, medsession_id):
         return JsonResponse({
             'status': 'no task',
             'progress': 0,
+            'TimeTaken': 0,
         })
     # Prepare the response
     response = JsonResponse({
         'status': task_status.status,
         'progress': task_status.progress,
+        'TimeTaken': task_status.TimeTaken,
     })
     # If the task is complete, delete it
     if task_status.status in ['completed', 'error']:

@@ -11,8 +11,7 @@ from PIL import Image
 import logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
-
-from PIL import ExifTags
+import time
 from PIL import Image
 from PIL.ExifTags import TAGS
 from pillow_heif import register_heif_opener
@@ -64,7 +63,6 @@ def correct_image_orientation(image_path):
             exif = None
             if hasattr(image, "_getexif") and image._getexif() is not None:
                 exif = {TAGS[key]: value for key, value in image._getexif().items() if key in TAGS and isinstance(TAGS[key], str)}
-                print(f'[DEBUG] exif: {exif}')
                 # Get the orientation tag (key: "Orientation")
                 orientation = exif.get("Orientation")
                 # Rotate the image based on the orientation tag
@@ -83,111 +81,67 @@ def correct_image_orientation(image_path):
 
 
 def detect_faces(img_cv2, min_size=(40, 40)):
+    start_time = time.time()
     detected_faces = []
     faces = w_detect_face(img_cv2)
+    logger.debug(f"Raw Detected {len(faces)} faces.")
     if faces:
         for face in faces:
             box, confidence = face['box'], face['confidence']
             x, y, width, height = box
             if width < min_size[0] or height < min_size[1]:
+                logger.debug(f"Face size {width, height} smaller than minimum size {min_size}. Skipping.")
                 continue
             face_pixels = img_cv2[y: y + height, x: x + width]
             face_check = w_detect_face(face_pixels)
-            if face_check:
+            if True: # face_check disabled
                 detected_faces.append({
                     'face_pixels': face_pixels,            
                     'box': box,
                     'confidence': confidence,
                 })
+    logger.debug(f"Detection took {(time.time() - start_time):.2f} seconds. Detected {len(detected_faces)} faces.")
     return detected_faces
 
 def extract_faces(medsession_dir, min_size=(50, 50)):
+    start_time = time.time()
     faces_df = []
+    face_count = 0
     for file_name in os.listdir(medsession_dir):
         file_path = os.path.join(medsession_dir, file_name)
-        if not os.path.exists(file_path):
-            raise FileNotFoundError(f"File path does not exist: {file_path}")
-        if os.path.getsize(file_path) == 0:
-            raise ValueError(f"File is empty: {file_path}")
         try:
+            if not os.path.exists(file_path):
+                raise FileNotFoundError(f"File path does not exist: {file_path}")
+            if os.path.getsize(file_path) == 0:
+                raise ValueError(f"File is empty: {file_path}")
             img = correct_image_orientation(file_path)
-        except IOError:
-            raise ValueError(f"File {file_name} is not a valid image.")
-        
-        img = np.array(img, dtype='uint8')
-        img_cv2 = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-        logger.debug(f'image: {file_path}, size: {len(np.array(img))}')
-        detected_faces = detect_faces(img_cv2, min_size)
-        if not detected_faces:
-            logger.debug(f'No faces detected in the image: {file_path}.')
-            continue
-        for face in detected_faces:
-            face['image_path'] = file_path
-            faces_df.append(face)
-        logger.debug(f'{len(faces_df)} faces extracted from image: {file_path}.')
-    faces_df = pd.DataFrame(faces_df)
-    return faces_df
-
-def extract_faces_OLD(medsession_dir, min_size=(50, 50)):
-    faces_df = []      
-    for file_name in os.listdir(medsession_dir):
-        file_path = os.path.join(medsession_dir, file_name)        
-
-        if not os.path.exists(file_path):
-            raise ValidationError("File path does not exist.")
-
-        if os.path.getsize(file_path) == 0:
-            raise ValidationError("File is empty.")
-        
-        try:
-            img = correct_image_orientation(file_path)            
-        except IOError:
-            raise ValidationError(f"File {file_name} is not a valid image.")
-
-        img = np.array(img, dtype='uint8')
-        img_cv2 = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-        
-        faces = w_detect_face(img_cv2)
-        print(f'[DEBUG] image: {file_path}, size: {len(np.array(img))}')
-
-        if not faces:
-            print(f'[DEBUG] No faces detected in the image: {file_path}.')
-            continue
-        
-        for face in faces:
-            box, confidence = face['box'], face['confidence']
-            x, y, width, height = box
-
-            # Skip faces that are too small
-            if width < min_size[0] or height < min_size[1]:
+            img = np.array(img, dtype='uint8')
+            img_cv2 = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+            logger.debug(f'image: {file_path}, size: {len(np.array(img))}')
+            detected_faces = detect_faces(img_cv2, min_size)
+            if not detected_faces:
+                logger.debug(f'No faces detected in the image: {file_path}.')
                 continue
-            
-            # Extract face pixels
-            face_pixels = img_cv2[y: y + height, x: x + width]
-            
-            # Check again if the extracted face is really a face
-            face_check = w_detect_face(face_pixels)       
-            if not face_check:
-                continue
-            
-            faces_df.append({    
-                'face_pixels': face_pixels,            
-                'box': box,
-                'confidence': confidence,
-                'image_path': file_name,
-            })
-        
-        print(f'[DEBUG] {len(faces_df)} faces extracted from image: {file_path}.')
-        
+            for face in detected_faces:
+                face['image_path'] = file_path
+                faces_df.append(face)
+            face_count += len(detected_faces)
+            logger.debug(f'{len(faces_df)} faces extracted from image: {file_path}.')
+        except Exception as e:
+            logger.error(f"Error processing file {file_path}: {e}")
+            continue
     faces_df = pd.DataFrame(faces_df)
+    logger.info(f"Extracted {face_count} faces from {len(os.listdir(medsession_dir))} files in {(time.time() - start_time):.2f} seconds.")
     return faces_df
 
 def predict_in_batches(face_pixels, model, batch_size=64):
+    start_time = time.time()
     predictions = []
     for i in range(0, face_pixels.shape[0], batch_size):
         batch = face_pixels[i:i+batch_size]
         batch_predictions = model.predict(batch)
         predictions.extend(batch_predictions)
+    logger.debug(f"Prediction took {(time.time() - start_time):.2f} seconds. Made {len(predictions)} predictions.")
     return np.array(predictions)
 
 def query_models(faces_df):
@@ -216,37 +170,38 @@ def query_models(faces_df):
 
     # Load each model and make predictions
     for model_name, model in models.items():
-        print(f"[DEBUG] Making predictions with {model_name} model...")
+        logger.debug(f"Making predictions with {model_name} model...")
         predictions = predict_in_batches(face_pixels, model, batch_size=32)
 
-        print(f"[DEBUG] Updating DataFrame with predictions...")
+        logger.debug("Updating DataFrame with predictions...")
         class_indices = np.argmax(predictions, axis=1)
         class_confidences = np.max(predictions, axis=1)
 
         person_df[model_name + '_label'] = [class_labels[i] for i in class_indices]
         person_df[model_name + '_confidence'] = class_confidences
 
-        # print(f"[DEBUG] Completed predictions with {model_name} model.")
+        logger.debug(f"Completed predictions with {model_name} model.")
     return person_df
 
 def elect_answer(person_df):
+    start_time = time.time()
     # New column for elected label
     person_df['elected_label'] = ''
     
     for i, person in person_df.iterrows():
-        # print(f"[DEBUG] Processing row {i}...")
+        # logger.debug(f"Processing row {i}...")
         
         labels = [person['resnet50_label'], person['senet50_label'], person['vgg16_label']]
         confidences = [person['resnet50_confidence'], person['senet50_confidence'], person['vgg16_confidence']]
         
         # Count the occurrences of each label
         label_counts = {label: labels.count(label) for label in labels}
-        print(f"[DEBUG] label counts: {label_counts}")
+        # logger.debug(f"label counts: {label_counts}")
         
         # Find the label(s) with the maximum count
         max_count = max(label_counts.values())
         max_labels = [label for label, count in label_counts.items() if count == max_count]
-        print(f"[DEBUG] max labels: {max_labels}")        
+        # logger.debug(f"max labels: {max_labels}")        
         if len(max_labels) == 1:
             # If there's one label with the maximum count, use it
             person_df.loc[i, 'elected_label'] = max_labels[0]
@@ -254,15 +209,18 @@ def elect_answer(person_df):
             # If there's a tie, use the label with the highest average confidence
             avg_confidences = [np.mean([confidences[j] for j in range(3) if labels[j] == label]) for label in max_labels]
             person_df.loc[i, 'elected_label'] = max_labels[np.argmax(avg_confidences)]
-        print(f"[DEBUG] Elected label for row {i}: {person_df.loc[i, 'elected_label']}")
+        # logger.debug(f"Elected label for row {i}: {person_df.loc[i, 'elected_label']}")
+    logger.info(f"Elected answers for {len(person_df)} rows in {(time.time() - start_time):.2f} seconds.")
     return person_df
 
 def remove_duplicates(elected):
-    print("[DEBUG] Total records before removing duplicates: ", len(elected))    
+    start_time = time.time()
+    logger.debug(f"Total records before removing duplicates: {len(elected)}")
+    
     # Detect duplicates
     duplicates = elected[elected.duplicated(subset='elected_label', keep=False)]
-    print("[DEBUG] Duplicates:")
-    print(duplicates)    
+    logger.debug("Duplicates:")
+    logger.debug(duplicates)
     
     # Add column for area of bounding box
     elected['box_area'] = elected['box'].apply(lambda b: b[2]*b[3])
@@ -272,33 +230,16 @@ def remove_duplicates(elected):
     
     # Remove duplicates, keeping the first one (which, due to the sorting, will be the one with the largest area)
     unique_persons = elected.drop_duplicates(subset='elected_label')
-    print("[DEBUG] Total records after removing duplicates: ", len(unique_persons))
+    logger.debug(f"Total records after removing duplicates: {len(unique_persons)}")
     
     # Split 'elected_label' and create a new column 'name'
     unique_persons['fullname'] = unique_persons['elected_label'].apply(lambda x: x.split('_')[1] if '_' in x else x)    
     # Sort DataFrame by 'name' in ascending order
     unique_persons_sorted = unique_persons.sort_values(by='fullname', ascending=True)    
-    print("[DEBUG] Sorted by fullname")
+    logger.debug("Sorted by fullname")
 
     # Drop the 'box_area' and 'name' column
-    unique_persons_sorted = unique_persons_sorted.drop(columns=['box_area', 'fullname'])   
+    unique_persons_sorted = unique_persons_sorted.drop(columns=['box_area', 'fullname'])  
     
-    return unique_persons_sorted
-
-def remove_duplicates2(elected):
-    print("[DEBUG] Total records before removing duplicates: ", len(elected))    
-    # Detect duplicates
-    duplicates = elected[elected.duplicated(subset='elected_label', keep=False)]
-    print("[DEBUG] Duplicates:")
-    print(duplicates)    
-    # Remove duplicates
-    unique_persons = elected.drop_duplicates(subset='elected_label')
-    print("[DEBUG] Total records after removing duplicates: ", len(unique_persons))
-    # Split 'elected_label' and create a new column 'name'
-    unique_persons['fullname'] = unique_persons['elected_label'].apply(lambda x: x.split('_')[1] if '_' in x else x)    
-    # Sort DataFrame by 'name' in ascending order
-    unique_persons_sorted = unique_persons.sort_values(by='fullname', ascending=True)    
-    print("[DEBUG] Sorted by fullname")
-    # Drop the 'name' column
-    unique_persons_sorted = unique_persons_sorted.drop(columns=['fullname'])    
+    logger.info(f"Duplicates removed and DataFrame sorted in {(time.time() - start_time):.2f} seconds.")
     return unique_persons_sorted

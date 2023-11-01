@@ -4,8 +4,6 @@ from django.utils import timezone
 from django.db import models
 
 
-
-
 class Medsession(models.Model):
     PERIOD_CHOICES = [(str(i), str(i)) for i in range(1, 4)]
     YEAR_CHOICES = [(str(i), str(i)) for i in range(1, 7)]
@@ -26,6 +24,7 @@ class TaskStatus(models.Model):
     phase = models.CharField(max_length=255)
     status = models.CharField(max_length=255)
     progress = models.IntegerField(default=0)
+    TimeTaken = models.IntegerField(default=0)
     last_updated = models.DateTimeField(auto_now=True)
 
 def upload_to(instance, filename):
