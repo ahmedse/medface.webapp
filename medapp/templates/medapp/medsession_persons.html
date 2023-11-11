@@ -290,7 +290,7 @@
                             Delete
                         </button>
     
-                        <!-- Modal -->
+                        <!-- correct Modal -->
                         <div class="modal fade" id="correctModal{{ person.id }}" tabindex="-1" role="dialog" aria-labelledby="correctModalLabel{{ person.id }}" aria-hidden="true">
                             <div class="modal-dialog" role="document">
                                 <div class="modal-content">
@@ -300,19 +300,30 @@
                                             <span aria-hidden="true">&times;</span>
                                         </button>
                                     </div>
+
+                                    <style>.scrollable-dropdown {
+                                        max-height: 200px;
+                                        overflow-y: auto;
+                                    }</style>
+                                    
                                     <div class="modal-body">
                                         <form id="correctForm{{ person.id }}" action="{% url 'correct_person' person.id %}">
-                                            <select name="corrected_label">
+                                            
+                                            <select name="corrected_label" id="corrected_label{{ person.id }}" class="scrollable-dropdown" onchange="changeImage(this.value, {{ person.id }})">
                                                 {% for student in students %}
-                                                    <option value="{{ student.label }}">{{ student.label }}</option>
+                                                    <option value="{{ student.label }}" data-img="{{ student.personal_photo_url }}" {% if student.label == person.corrected_label %}selected{% endif %}>{{ student.label }}</option>
                                                 {% endfor %}
                                             </select>
+                                            <a id="studentImageLink{{ person.id }}" href="{{ person.personal_photo_url }}" target="_blank">
+                                                <img id="studentImage{{ person.id }}" src="{{ person.personal_photo_url }}" alt="Student Photo" class="img-thumbnail my-3" style="max-width: 100px;"/>
+                                            </a>
                                             <div class="modal-footer">
                                                 <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
                                                 <button type="submit" class="btn btn-primary">Save changes</button>
                                             </div>
                                         </form>
                                     </div>
+
                                 </div>
                             </div>
                         </div>
@@ -327,8 +338,20 @@
     </table>
 </div>
 <script>
+function changeImage(value, id) {
+    var selectElement = document.getElementById("corrected_label" + id);
+    var selectedOption = selectElement.options[selectElement.selectedIndex];
+    var imgElement = document.getElementById("studentImage" + id);
+    imgElement.src = selectedOption.getAttribute('data-img');
+
+    // Update image link
+    var imgLink = document.getElementById("studentImageLink" + id);
+    imgLink.href = selectedOption.getAttribute('data-img');
+}
 
 $(document).ready(function() {
+    $('#corrected_label{{ person.id }}').select2();
+
     $('.delete-person').on('click', function() {
         var personId = $(this).data('person-id');
         var confirmation = confirm('Are you sure you want to delete this person? This action cannot be undone.');

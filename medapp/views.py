@@ -34,6 +34,7 @@ from django.db import transaction
 import traceback
 from django.shortcuts import redirect
 
+
 def get_image_url(image_path):    
     """Return the URL of an image given its file path."""
     image_url = settings.MEDIA_URL + os.path.relpath(image_path, settings.MEDIA_ROOT).replace("\\", "/") 
@@ -89,7 +90,12 @@ def get_medsession_images(medsession):
 
 def get_label(person):
     """Return the corrected_label if it exists, otherwise return the elected_label."""
-    return person.corrected_label if person.corrected_label else person.elected_label
+    if hasattr(person, 'corrected_label'):
+        return person.corrected_label if person.corrected_label else person.elected_label
+    elif hasattr(person, 'label'):
+        return person.label
+    else:
+        raise AttributeError("The object doesn't have a label or corrected_label attribute.")
 
 def get_personal_photo_url(label):
     """Return the URL of the personal photo for a given label, or None if no such photo exists."""
@@ -133,6 +139,11 @@ def medsession_persons(request, medsession_id):
     src_image_data = get_medsession_images(medsession)
     logger.info(f"src_image_data: {src_image_data}")
     # print(f"[DEBUG] src_image_data: {src_image_data}")
+
+        # Iterate over students to add personal_photo_url
+    for student in students:
+        label = get_label(student)
+        student.personal_photo_url = get_personal_photo_url(label)
 
     for person in persons:
         label = get_label(person)
