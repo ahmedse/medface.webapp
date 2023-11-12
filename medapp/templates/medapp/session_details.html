@@ -1,0 +1,12 @@
+<!-- Session Details -->
+<h2>Session Details</h2>
+<p>Year: {{ medsession.get_year_display }}</p>
+<p>Term: {{ medsession.get_term_display }}</p>
+<p>Day: {{ medsession.day }}</p>
+<p>Room: {{ medsession.room }}</p>
+
+<p>Period: {{ medsession.get_period_display }}</p>
+<p>Course: {{ medsession.course }}</p>
+<p>Lecturer: {{ medsession.lecturer }}</p>
+<p>Last Modified: {{ medsession.modifytime|date:"F j, Y, P" }}</p> <!-- Use Django's date filter -->
+<p>Students Detected in Photos: {{ persons.count }}</p>

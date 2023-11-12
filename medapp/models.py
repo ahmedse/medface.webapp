@@ -66,4 +66,22 @@ class Person(models.Model):
     label = models.CharField(max_length=100, default='')
     
     modifytime = models.DateTimeField(auto_now=True)
+
+class Room(models.Model):
+    BUILDING_CHOICES = [('B2', 'B2'), ('B3', 'B3'), ('B4', 'B4'), ('B5', 'B5'), ('B6', 'B6'), ('Hospital', 'Hospital'), ('Other', 'Other')]
+    FLOOR_CHOICES = [(str(i), str(i)) for i in range(0, 5)]
+    SECTION_CHOICES = [('PBL', 'PBL'), ('Clinical', 'Clinical'), ('Bedside Teaching', 'Bedside Teaching')]
+    TYPE_CHOICES = [('Lecture Room', 'Lecture Room'), ('Skill Lab', 'Skill Lab'), ('Think Tank', 'Think Tank'), ('Virtual Hospital', 'Virtual Hospital'), ('X-Reality', 'X-Reality'), ('Amphitheatre', 'Amphitheatre'), ('Operating Theatre', 'Operating Theatre')]
+
+    id = models.AutoField(primary_key=True)
+    room_code = models.CharField(max_length=15, unique=False, blank=True)
+    room_section = models.CharField(max_length=50, choices=SECTION_CHOICES, default='', null=True, blank=True)
+    notes = models.CharField(max_length=250, default='', null=True, blank=True)
+    type = models.CharField(max_length=50, choices=TYPE_CHOICES, default='Lecture Room', null=True, blank=True)
+    floor = models.CharField(max_length=50, choices=FLOOR_CHOICES, default='', null=True, blank=True)
+    building = models.CharField(max_length=50, choices=BUILDING_CHOICES, default='B2', null=True, blank=True)
+    modifytime = models.DateTimeField(auto_now=True)
+
+
+
     

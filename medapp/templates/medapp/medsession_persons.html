@@ -256,11 +256,15 @@
             
                 <tr>
                     <td>
-                        <img src="{{ person.image_url }}" alt="{{ person.elected_label }}" style="width:80px;">
+                        <a href="{{ person.image_url }}" target="_blank">
+                            <img src="{{ person.image_url }}" alt="{{ person.elected_label }}" style="width:80px;">
+                        </a>
                     </td>
                     <td>
                         {% if person.personal_photo_url %}
-                            <img src="{{ person.personal_photo_url }}" alt="{{ person.elected_label }}" style="width:80px;">
+                            <a href="{{ person.personal_photo_url }}" target="_blank">
+                                <img src="{{ person.personal_photo_url }}" alt="{{ person.elected_label }}" style="width:80px;">
+                            </a>
                         {% endif %}
                     </td>
                     <td>
@@ -422,4 +426,3 @@ $(document).ready(function() {
 </script>
 
 {% endblock %}
-

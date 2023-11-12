@@ -113,6 +113,8 @@ def get_personal_photo_url(label):
 
     return personal_photo_url
 
+import os
+
 def get_person_image_url(medsession, label, image_path, box):
     """Return the URL of the person image, processing and saving the image if necessary."""
     temp_dir = os.path.join(settings.MEDIA_ROOT, "temp")
@@ -120,10 +122,23 @@ def get_person_image_url(medsession, label, image_path, box):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg", prefix=f"{label}_", dir=temp_dir) as temp_file:
         save_path = temp_file.name
 
-    src_face_path = os.path.join(get_medsession_images_dir(medsession), image_path)
+    medsession_images_dir = get_medsession_images_dir(medsession)
+    if medsession_images_dir is None:
+        medsession_images_dir = os.path.join(settings.STATIC_ROOT, "images")  # Default directory
+
+    if image_path is None:
+        image_path = "no-preview.png"  # Default image
+
+    src_face_path = os.path.join(medsession_images_dir, image_path)
+
+    # If the image file doesn't exist, use the fallback image instead
+    if not os.path.isfile(src_face_path):
+        src_face_path = os.path.join(settings.STATIC_ROOT, "images/no-preview.png")
+
     u.save_face_from_src(src_face_path, box, save_path)
 
     return get_image_url(save_path)
+
 
 def medsession_persons(request, medsession_id):
     # print(f"[DEBUG] inside medsession_persons: {medsession_id}")
