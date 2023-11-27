@@ -2,141 +2,500 @@
 
 {% block content %}
 
-<div class="row">
+<style>
+  @keyframes pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(0,123,255,0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 10px rgba(0,123,255,0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(0,123,255,0);
+    }
+}
+
+#task-status-card.pulse {
+    animation: pulse 2s infinite;
+}
+
+#task-status-card .card-body {
+    height: 150px; /* Adjust this value as needed */
+    overflow: auto;
+}
+    
+    .student-info {
+        background-color: #f2f2f2; /* Light grey */
+        font-family: Arial, sans-serif;
+        font-size: 14px;
+        font-weight: bold;
+    }
+    .student-info-sub {
+        background-color: #f2f2f2; /* Light grey */
+        font-family: Arial, sans-serif;
+        font-size: 13px;
+        font-weight: normal;
+    }
+    
+    .attendance-info {
+        background-color: #d9edf7; /* Light blue */
+        font-family: Arial, sans-serif;
+        font-size: 14px;
+        font-weight: bold;
+    }
+    .attendance-info-sub {
+        background-color: #d9edf7; /* Light blue */
+        font-family: Arial, sans-serif;
+        font-size: 13px;
+        font-weight: normal;
+    }
+    
+    .action {
+        background-color: #fcf8e3; /* Light yellow */
+        font-family: Arial, sans-serif;
+        font-size: 14px;
+        font-weight: bold;
+    }
+    
+    table tbody tr:nth-child(even) {
+        background-color: #f9f9f9; /* Lighter grey for alternate rows */
+    }
+    
+    .btn-extra-sm {
+        padding: 5px 10px;
+        font-size: 12px;
+        line-height: 1.5;
+        border-radius: 3px;
+    }
+    
+    .delete-btn {
+        margin-left: 10px; /* adjust as needed */
+    }
+
+    .modal-dialog-centered {
+        display: flex;
+        align-items: center;
+        min-height: calc(100% - 1rem);
+    }
+    .wide-select {
+        width: 100%;
+    }
+</style>
+
+<div class="row d-flex align-items-stretch">
     <!-- Session Details Column -->
-    <div class="col-lg-6">
-        <div class="card mb-4">
-            <div class="card-header">
-                <h5 class="card-title">Session Details</h5>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-6">
-                        <p><strong>Year:</strong> {{ medsession.get_year_display }}</p>
-                        <p><strong>Term:</strong> {{ medsession.get_term_display }}</p>
-                        <p><strong>Day:</strong> {{ medsession.day }}</p>        
-                        <p><strong>Room:</strong> {{ medsession.room }}</p>
-                    </div>
-                    <div class="col-md-6">
-                        <p><strong>Period:</strong> {{ medsession.get_period_display }}</p>
-                        <p><strong>Course:</strong> {{ medsession.course }}</p>
-                        <p><strong>Lecturer:</strong> {{ medsession.lecturer }}</p>
-                        <p><strong>Last Modified:</strong> {{ medsession.modifytime }}</p>
-                        <p><strong>Students Detected in Photos:</strong> {{ persons.count }}</p>
-                    </div>
+    <div class="col-lg-7 d-flex">
+        <div class="card shadow mb-4 flex-fill">
+            <div class="card-header py-2 d-flex align-items-center">
+                <h6 class="m-0 font-weight-bold text-primary flex-grow-1">Session Details</h6>
+                <div class="btn-group">
+                    <a href="{% url 'export_medsessionpersons' medsession.sessionid %}" target="_blank" class="btn btn-primary mb-2 py-1 px-2">
+                        <i class="fas fa-file-excel"></i> Export to Excel
+                    </a>
+                    <button type="button" class="btn btn-primary mb-2 py-1 px-2" data-toggle="modal" data-target="#addPerson">
+                        <i class="fas fa-user-plus"></i> Add Person
+                    </button>
+
                 </div>
             </div>
-        </div>
-        <!-- Task Status Column -->
-        <div class="col-lg-6" id="task-status-card" style="display: none;">
-            <div class="card mb-4">
-            <div class="card-header">
-                <h5 class="card-title">Task Status</h5>
-            </div>
+            
             <div class="card-body">
-                <p id="task-status">Status: </p>
-                <p id="task-progress">Progress: </p>
-                <p id="task-time">Time: </p>
-            </div>
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="small mb-3"><strong>Year:</strong> {{ medsession.get_year_display }}</div>
+                        <div class="small mb-3"><strong>Term:</strong> {{ medsession.get_term_display }}</div>
+                        <div class="small mb-3"><strong>Day:</strong> {{ medsession.day }}</div>
+                        <div class="small mb-3"><strong>Room:</strong> {{ medsession.room }}</div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="small mb-3"><strong>Period:</strong> {{ medsession.get_period_display }}</div>
+                        <div class="small mb-3"><strong>Course:</strong> {{ medsession.course }}</div>
+                        <div class="small mb-3"><strong>Lecturer:</strong> {{ medsession.lecturer }}</div>
+                        <div class="small mb-3"><strong>Last Modified:</strong> {{ medsession.modifytime }}</div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="small mb-3"><strong>Students Registered in Session:</strong> {{ medsessionpersons.count }}</div>
+                        <div class="small mb-3"><strong>Detected Faces:</strong> {{ medsession.detected_faces_count }}</div>
+                        <div class="small mb-3"><strong>Manual Entries:</strong> {{ medsession.manual_entries_count }}</div>
+                        <div class="small mb-3"><strong>Corrections Made:</strong> {{ medsession.corrections_count }}</div>
+                    </div>
+                </div>
+                <hr>
+                
+                <div class="row">
+                    <div class="col-md-12">
+                        <div class="small"><strong>Groups:</strong>
+                            {% for group in medsession.medsessiongroup_set.all %}
+                                {{ group.group }}{% if not forloop.last %}, {% endif %}
+                            {% empty %}
+                                No groups.
+                            {% endfor %}
+                        </div>
+                        <!-- Button to Open the Modal -->
+                        <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#groupsModal">
+                            Manage Groups
+                        </button>
+                    </div>
+                </div>
+
             </div>
         </div>
     </div>
 
-
-  
-    <!-- Session Images Column -->
-<div class="col-lg-6">
-    <div class="card mb-4">
-        <div class="card-header">
-            <h5 class="card-title">Session Images ({{ src_image_data|length }})</h5>
-        </div>
-        <div class="card-body" style="height: 300px; overflow-y: scroll;">
-            {% for image in src_image_data %}
-            <div>
-                <a href="{{ image.url }}" target="_blank">
-                    <img src="{{ image.url }}" alt="Session Image" style="width:200px;">
-                </a>
-                <!-- Delete Image Button -->
-                <button class="delete-image" data-image-id="{{ image.image_path }}">Delete</button>
+    <!-- Session Images and Task Status Column -->
+    <div class="col-lg-5 d-flex">
+        <!-- Session Images Card -->
+        <div class="card shadow mb-4 flex-fill">
+            <div class="card-header py-2 d-flex align-items-center">
+                <h6 class="m-0 font-weight-bold text-primary flex-grow-1">Session Images ({{ src_image_data|length }})</h6>
+                <div class="btn-group">
+                    <button class="btn btn-info mb-2 px-2 py-1" id="reprocess-button">
+                        <i class="fas fa-cogs mr-2"></i>Process Images
+                    </button>
+                </div>
             </div>
-            {% empty %}
-            <p class="text-center text-muted">No images found for this session.</p>
-            {% endfor %}
-            <!-- Upload Image Form -->
-            <input id="upload-image" type="file" name="image">
-            <input type="hidden" id="medsession-id" value="{{ medsession.sessionid }}">
-            <button id="upload-image-button">Upload</button>
+            <div class="card-body" style="height: 300px; overflow-y: auto;">
+                <input type="hidden" id="src-image-data-length" value="{{ src_image_data|length }}">
+                <!-- Original session images code goes here -->
+                {% for image in src_image_data %}
+                <div class="mb-3">
+                    <a href="{{ image.url }}" target="_blank">
+                        <img src="{{ image.url }}" alt="Session Image" class="img-thumbnail" style="width:200px;">
+                    </a>
+                    <!-- Delete Image Button -->
+                    <button class="delete-image btn btn-sm btn-danger mt-2" data-image-id="{{ image.image_path }}">Delete</button>
+                </div>
+                {% empty %}
+                <p class="text-center text-muted">No images found for this session.</p>
+                {% endfor %}
+                <!-- Upload Image Form -->
+                <div class="input-group mb-3">
+                    <div class="custom-file">
+                        <input type="file" class="custom-file-input" id="upload-image" name="image">
+                        <label class="custom-file-label" for="upload-image">Choose file</label>
+                    </div>
+                    <div class="input-group-append">
+                        <button class="btn btn-primary" id="upload-image-button" >Upload</button>
+                    </div>
+                </div>
+                <input type="hidden" id="medsession-id" value="{{ medsession.sessionid }}">
+            </div>
+        </div>      
+
+    </div>  
+    
+</div>  
+
+<!-- Groups Modal -->
+<div class="modal fade" id="groupsModal">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <!-- Modal Header -->
+            <div class="modal-header border-0 bg-light">
+                <h4 class="modal-title w-100 text-center">Manage Groups</h4>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <!-- Modal body -->
+            <div class="modal-body">
+                <form id="groupForm" method="post" class="px-4">
+                    {% csrf_token %}
+                    <div class="container mt-4">
+                        <div class="row">
+                            <div class="col-md-5">
+                                <label for="selectedGroups">Selected Groups in Session:</label>
+                                <select name="selectedGroups" id="selectedGroups" multiple class="form-control custom-select">
+                                    {% for group in selected_groups %}
+                                        <option value="{{ group }}">{{ group }}</option>
+                                    {% empty %}
+                                        <option disabled>No selected groups</option>
+                                    {% endfor %}
+                                </select>
+                                <button id="removeAll" type="button" class="btn btn-danger btn-sm btn-custom mt-2">Remove All »</button>
+                            </div>
+                            <div class="col-md-2 d-flex align-items-center justify-content-center">
+                                <div>
+                                    <button id="toRight" type="button" class="btn btn-primary btn-sm btn-custom mb-2">Add to Session «</button>
+                                    <button id="toLeft" type="button" class="btn btn-danger btn-sm btn-custom">Remove from Session »</button>
+                                </div>
+                            </div>
+                            <div class="col-md-5">
+                                <label for="availableGroups">Available Groups:</label>
+                                <select name="availableGroups" id="availableGroups" multiple class="form-control custom-select">
+                                    {% for group in available_groups %}
+                                        <option value="{{ group }}">{{ group }}</option>
+                                    {% endfor %}
+                                </select>
+                                <button id="addAll" type="button" class="btn btn-primary btn-sm btn-custom mt-2">Add All «</button>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <!-- Modal footer -->
+            <div class="modal-footer justify-content-center border-0 bg-light">
+                <button type="submit" form="groupForm" class="btn btn-primary">Save</button>
+                <button type="button" class="btn btn-outline-danger" data-dismiss="modal">Close</button>
+            </div>
         </div>
     </div>
-    <button id="reprocess-button">Reprocess Images</button>
 </div>
-   
-    <!-- Full-page overlay and spinner -->
-    <div id="overlay" style="display: none; position: fixed; width: 100%; height: 100%; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.5); z-index: 2; cursor: pointer;">
-        <div style="position: absolute; top: 50%; left: 50%; font-size: 50px; color: white;">
-            <i class="fa fa-spinner fa-spin"></i>
+
+<!-- Custom CSS -->
+<style>
+.btn-custom {
+    padding: .4rem .4rem; /* Increased the vertical padding */
+    font-size: .875rem;
+    line-height: 1.5;
+    border-radius: .2rem;
+    width: 120px;
+}
+
+.custom-select {
+    height: 250px;
+}
+</style>
+
+<!-- JavaScript -->
+
+<script>
+
+$(document).ready(function() {
+
+    updateAvailableGroups(); // Call this function after updating groups
+
+    $('#groupForm').off('submit').on('submit', function(e){
+        e.preventDefault();
+        // let selectedGroups = $('#selectedGroups option:selected').map(function() { return $(this).val(); }).get();
+        let allGroups = $('#selectedGroups option').map(function() {return $(this).val();}).get();
+        
+        $("#selectedGroups option").prop("selected", true); // Select all options before submitting
+
+        console.log(allGroups);
+        $.ajax({
+            url: "{% url 'manage-groups' medsession.sessionid %}",
+            type: 'POST',
+            data: {
+                csrfmiddlewaretoken: $('input[name=csrfmiddlewaretoken]').val(),
+                updated_groups: allGroups
+            },
+            success: function(response){
+                // Here you can handle the response from your Django view
+                // For example, you can show a success message or close the modal
+                $('#groupsModal').modal('hide');
+                alert('Changes saved successfully');
+                location.reload();
+            },
+            error: function(response){
+                // Here you can handle error situations
+                alert('Error occurred while saving changes');
+            }
+        });
+    });
+    
+    function sortList(list) {
+        var options = list.find('option');
+        options.sort(function(a, b) {
+            var aVal = parseFloat(a.text);
+            var bVal = parseFloat(b.text);
+            if (isNaN(aVal) || isNaN(bVal)) {
+                // One or both aren't numbers, so compare as text
+                if (a.text > b.text) {
+                    return 1;
+                } else if (a.text < b.text) {
+                    return -1;
+                } else {
+                    return 0;
+                }
+            } else {
+                // Both are numbers, so compare numerically
+                return aVal - bVal;
+            }
+        });
+        list.empty().append(options);
+    }
+
+    function removeNoGroupsOption(list) {
+        var options = list.find('option');
+        if (options.length > 1 || (options.length === 1 && options[0].value !== "")) {
+            list.find('option:disabled').remove();
+        }
+    }
+
+    function updateAvailableGroups() {
+        let selectedGroups = $('#selectedGroups option').map(function() { return $(this).val(); }).get();
+        $('#availableGroups option').each(function() {
+            if (selectedGroups.includes($(this).val())) {
+                $(this).remove();
+            }
+        });
+    }
+
+    $('#toRight, #toLeft, #addAll, #removeAll').click(function() {
+        var selectedGroups = $('#selectedGroups');
+        var availableGroups = $('#availableGroups');
+
+        switch (this.id) {
+            case 'toRight':
+                var selected = availableGroups.find('option:selected');
+                selectedGroups.append(selected);
+                break;
+            case 'toLeft':
+                var selected = selectedGroups.find('option:selected');
+                availableGroups.append(selected);
+                break;
+            case 'addAll':
+                var options = availableGroups.find('option');
+                selectedGroups.append(options);
+                break;
+            case 'removeAll':
+                var options = selectedGroups.find('option');
+                availableGroups.append(options);
+                break;
+        }
+
+        sortList(selectedGroups);
+        sortList(availableGroups);
+        removeNoGroupsOption(selectedGroups);
+        removeNoGroupsOption(availableGroups);        
+    });
+    
+
+});
+
+</script>
+
+<!-- Task Status Card -->
+<div class="card bg-light mb-1 border-primary" id="task-status-card" style="display: none; height: 70px;">
+    <div class="card-body py-0" style="height: 100%;">
+        <div class="row align-items-center">
+            <div class="col-md-2 text-primary font-weight-bold small">
+                <p id="task-status" class="mb-0" style="margin-bottom: 2;">Status:</p>
+            </div>
+            <div class="col-md-6">
+                <div class="progress mt-1 mb-0" style="height: 5px;">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated bg-warning" id="task-status-bar" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                </div>
+                <p id="task-progress-percent" class="small mb-0" style="margin-bottom: 2;">Progress:</p>
+            </div>
+            <div class="col-md-2 text-dark font-weight-bold small">
+                <p id="task-time" class="mb-0" style="margin-bottom: 2;">Time spent:</p>
+            </div>
+            <div class="col-md-2 text-center">
+                <button class="btn btn-success btn-sm" id="reload-button" style="display: none; width: 100px;" >
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-12 text-info font-weight-bold small">
+                <p id="task-msg" class="mb-0" style="margin-bottom: 2;">Message:</p>
+            </div>
         </div>
     </div>
+</div>
 
-    <script>
-        $('#reprocess-button').click(function() {
-            // Show the overlay and spinner
-            $('#overlay').show();
-            $('#task-status-card').show();
+<script>
+
+$(document).ready(function() {
     
-            $.ajax({
-                url: '/reprocess_images/',
-                method: 'POST',
-                data: {
-                    'medsession_id': $('#medsession-id').val()
-                },
-                headers: {'X-CSRFToken': '{{ csrf_token }}'},
-                success: function(response) {
-                    if (response.status === 'error') {
-                        alert(response.message);
-                        return;
-                    }
-                    // Start polling for task status
-                    pollTaskStatus();
-                },
-                error: function() {
-                    alert('Error reprocessing images');
-                },
-                complete: function() {
-                    // Hide the overlay and spinner
-                    // $('#overlay').hide();
+    // Get the length of src_image_data from the hidden input
+    var srcImageDataLength = $('#src-image-data-length').val();
+
+    // Check if there are any source images
+    if (srcImageDataLength == 0) {
+        // If there are no source images, disable the 'Reprocess Images' button
+        $('#reprocess-button').prop('disabled', true);
+    }
+    
+    var isPolling = false;
+    // Check task status when page loads
+    pollTaskStatus();
+
+    $('#reprocess-button').click(function() {
+        // Disable the reprocess button
+        $(this).prop('disabled', true);
+
+        $.ajax({
+            url: '/reprocess_images/',
+            method: 'POST',
+            data: {
+                'medsession_id': $('#medsession-id').val()
+            },
+            headers: {'X-CSRFToken': '{{ csrf_token }}'},
+            success: function(response) {
+                if (response.status === 'error') {
+                    alert(response.message);
+                    return;
                 }
-            });
+                // Start polling for task status
+                isPolling = true;
+                pollTaskStatus();
+            },
+            error: function() {
+                alert('Error reprocessing images');
+            },
+            complete: function() {
+                // Hide the overlay and spinner
+                // $('#overlay').hide();
+            }
         });
-    
-        function pollTaskStatus() {
-            var medsession_id = $('#medsession-id').val();
-            $.ajax({
-                url: '/get_task_status/' + medsession_id + '/',
-                success: function(data) {
+    });
+
+    function pollTaskStatus() {
+        if (!isPolling) {
+            return;
+        }
+        var medsession_id = $('#medsession-id').val();
+        $.ajax({
+            url: '/get_task_status/' + medsession_id + '/',
+            success: function(data) {
+                if (data.status == 'no task') {
+                    // $('#task-status-card').hide();
+                    $('#reprocess-button').prop('disabled', false);
+                } else {
+                    $('#task-status-card').show();
                     $('#task-status').text('Status: ' + data.status);
                     $('#task-progress').text('Progress: ' + data.progress + '%');
                     $('#task-time').text('Time: ' + data.TimeTaken + ' seconds');
+                    $('#task-msg').text(data.msg);
 
-                    if (data.status == 'completed' || data.status == 'error') {
-                        // If the task is completed or there is an error, stop polling and refresh the page after a delay
-                        setTimeout(function() {
-                            location.reload();
-                        }, 5000);  // delay of 5 seconds
-                    } else {
-                        // If the task is not yet completed, keep polling
-                        setTimeout(pollTaskStatus, 5000);
-                    }
-                },
-                error: function() {
-                    alert('Error getting task status');
+                    // Update progress bar and progress percentage
+                    $('#task-status-bar').css('width', data.progress + '%').attr('aria-valuenow', data.progress);
+                    $('#task-progress-percent').text(data.progress + '%');
                 }
-            });
-        }
-    </script>
-       
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script>
+
+                console.log(data.status);
+
+                if (data.status == 'DONE' || data.status == 'Done' || data.status == 'FAIL' || data.status == 'Fail') {
+                    // Show the reload button if task is done
+                    if (data.status == 'DONE' || data.status == 'Done') {
+                        console.log('Task is done, trying to show button');
+                        $('#reload-button').show();
+                        console.log('Button should be visible now');
+                        isPolling = false;
+                    }
+                    // Enable the reprocess button
+                    $('#reprocess-button').prop('disabled', false);
+                } else {
+                    // If the task is not yet completed, keep polling
+                    setTimeout(pollTaskStatus, 5000);
+                }         
+            },
+            error: function() {
+                alert('Error getting task status');
+            }
+        });
+    }
+
+    $('#reload-button').click(function() {
+        location.reload();
+    });
+});
+
+</script>
+    
+    
+<script>
 
     $(document).ready(function() {
         $('.delete-image').click(function() {
@@ -187,119 +546,212 @@
         });
     });     
     </script>
-  
 
-
-  <!-- <a href="{% url 'medsession_pdf' medsession.sessionid %}" class="btn btn-primary">Download as PDF</a> -->
-
-  <!-- Export to Excel Button -->
-    <a href="{% url 'export_medsessionpersons' medsession.sessionid %}" target="_blank" class="btn btn-primary mb-3">
-        <i class="fas fa-file-excel"></i> Export to Excel
-    </a>
-
-    <!-- Add Person Button -->
-    <button type="button" class="btn btn-primary mb-3" data-toggle="modal" data-target="#addPersonModal">
-        <i class="fas fa-user-plus"></i> Add Person
-    </button>
-  
-  <!-- Add Person Modal -->
-  <div class="modal fade" id="addPersonModal" tabindex="-1" role="dialog" aria-labelledby="addPersonModalLabel" aria-hidden="true">
-    <div class="modal-dialog" role="document">
+<!-- Add Person Modal -->
+<div class="modal fade" id="addPerson" tabindex="-1" aria-labelledby="addPersonLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
       <div class="modal-content">
+        <form id="addPersonForm" action="{% url 'add_person' medsession_id=medsession.sessionid %}" method="post">
         <div class="modal-header">
-          <h5 class="modal-title" id="addPersonModalLabel">Add Person</h5>
-          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-            <span aria-hidden="true">&times;</span>
-          </button>
+          <h5 class="modal-title" id="addPersonLabel">Add Student</h5>
+          <button type="button" class="btn-close" data-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body">
-        <form id="addPersonForm" action="{% url 'add_person' %}">
-            <!-- corrected_label dropdown field -->
-            <div class="form-group">
-                <label for="corrected_label">Corrected Label</label>
-                <select class="form-control" id="corrected_label" name="corrected_label" required>
-                    {% for student in students %}
-                        <option value="{{ student.label }}">{{ student.label }}</option>
-                    {% endfor %}
-                </select>
+          <div class="row">
+            <div class="col-md-6">
+              <select id="studentList" class="form-select" style="height: 300px;" size="10">
+                {% for student in students_in_medsession_year %}
+                  <option value="{{ student.personal_photo_url }}" data-name="{{ student.fullname }}">{{ student.group }} - {{ student.regno }} - {{ student.fullname }}</option>
+                {% endfor %}
+              </select>
             </div>
-            
-            <!-- medsession_id input field (hidden) -->
-            <input type="hidden" id="medsession_id" name="medsession_id" value="{{ medsession.sessionid }}">
-        
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-                <button type="submit" class="btn btn-primary">Add Person</button>
+            <div class="col-md-6 d-flex align-items-center justify-content-center">
+              <div style="width: 300px; height: 300px; overflow: hidden; display: flex; align-items: center; justify-content: center;">
+                <img id="studentImage" src="" alt="Student Image" class="img-fluid" style="max-height: 100%;">
+              </div>
             </div>
-        </form>
+          </div>
+          <div class="mt-3">
+            <p>Total students in medsession: <strong>{{ students_in_medsessionpersons|length }}</strong></p>
+            <p>Remaining students this year: <strong>{{ students_in_medsession_year|length }}</strong></p>
+          </div>
         </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Add Student</button>
+        </div>
+        <!-- Add a hidden field for the student's label -->
+        <input type="hidden" id="studentLabel" name="studentLabel">
+    </form>
       </div>
     </div>
-  </div>
+</div>
+
+<script>
+$(document).ready(function() {
+    $('#studentList').on('change', function() {
+        // Set the src of the studentImage to the value of the selected option
+        $('#studentImage').attr('src', $(this).val());
+
+        // Set the value of the hidden field to the label of the selected option
+        $('#studentLabel').val($('option:selected', this).text());
+    });
+
+  // Handle the submission of the add person form
+  $('#addPersonForm').on('submit', function(e) {
+    e.preventDefault();
+    var form = $(this);
+    var url = form.attr('action');
+
+    $.ajax({
+      type: 'POST',
+      url: url,
+      data: form.serialize(),
+      success: function(data) {
+        alert(data.message);
+        $('#addPerson').modal('hide');
+        location.reload();
+      }
+    });
+  });
+});
+</script>
+
 
   <!-- Persons Grid -->
+
 <div class="table-responsive">
-    <table class="table">
+    <!-- Persons Grid -->
+<div class="table-responsive">
+    <table id="medsessionpersons_table" class="table">
         <thead>
+            <tr>                
+                <th colspan="4" class="student-info">Student Info</th>
+                <th colspan="3" class="attendance-info">Attendance Info</th>
+                <th class="action"></th>
+            </tr>
             <tr>
-                <th>Detected</th>
-                <th>Personal Photo</th>
-                <th>Registration Number</th>
-                <th>Name</th>
-                <!-- Add more columns headers as needed -->
-                <th>By</th>
-                <th>Action</th>
+                <th class="student-info-sub">Group</th>
+                <th class="student-info-sub">Full Name</th>     
+                <th class="student-info-sub">Reg. Number</th>
+                <th class="student-info-sub">Personal Photo</th>           
+                <th class="attendance-info-sub">Detection Status</th>
+                <th class="attendance-info-sub">Detected Face</th>                
+                <th class="attendance-info-sub">Attendance Status</th>
+                <th class="action">Action</th>
             </tr>
         </thead>
         <tbody>
-            {% for person in persons|dictsort:"name" %}
-            
+            {% for medsessionperson in medsessionpersons %}            
                 <tr>
+                    <td>{{ medsessionperson.person.group }}</td>
+                    <td>{{ medsessionperson.person.fullname }}</td>
+                    <td>{{ medsessionperson.person.regno }}</td>                    
                     <td>
-                        <a href="{{ person.image_url }}" target="_blank">
-                            <img src="{{ person.image_url }}" alt="{{ person.elected_label }}" style="width:80px;">
+                        <a href="{{ medsessionperson.person.personal_photo_url }}" target="_blank">
+                            <img src="{{ medsessionperson.person.personal_photo_url }}" alt="{{ medsessionperson.person.fullname }}" style="width:80px;">
                         </a>
                     </td>
+                    <td>{{ medsessionperson.get_status_display }}</td>
                     <td>
-                        {% if person.personal_photo_url %}
-                            <a href="{{ person.personal_photo_url }}" target="_blank">
-                                <img src="{{ person.personal_photo_url }}" alt="{{ person.elected_label }}" style="width:80px;">
+                        {% if medsessionperson.image_url %}
+                            <a href="{{ medsessionperson.image_url }}" target="_blank">
+                                <img src="{{ medsessionperson.image_url }}" alt="{{ medsessionperson.elected_label }}" style="width:80px;">
                             </a>
                         {% endif %}
                     </td>
-                    <td>
-                        {{ person.registration }}
-                    </td>
-                    <td>
-                        {{ person.name }}
-                    </td>
+                    
                     <!-- Added By Column -->
                     <td>
-                        {% if person.added_by == '0' %}
-                            AI
-                        {% elif person.added_by == '1' %}
-                            Manual
-                        {% else %}
-                            Unknown
-                        {% endif %}
+                        {{ medsessionperson.get_attendance_display }}
                     </td>
-                    <!-- Add more columns data as needed -->
                     <td>
-                        <!-- Action Button -->
-                        <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#correctModal{{ person.id }}">
-                            Correct
-                        </button>
-                        <!-- Delete Button -->
-                        <button type="button" class="btn btn-danger delete-person" data-person-id="{{ person.id }}">
-                            Delete
-                        </button>
-    
+                        <div class="btn-group" role="group" aria-label="Action Buttons">
+                            <!-- Not him/her ? -->
+                            {% if medsessionperson.image_url %}
+                                <button type="button" class="btn btn-primary btn-extra-sm" data-toggle="modal" data-target="#correctModal{{ medsessionperson.id }}">
+                                    Not him/her ?
+                                </button>
+                            {% else %}
+                                <button type="button" class="btn btn-primary btn-extra-sm" data-toggle="modal" data-target="#correctModal{{ medsessionperson.id }}" disabled>
+                                    Not him/her ?
+                                </button>
+                            {% endif %}
+                            <!-- Mark manual -->
+                            <button type="button" class="btn btn-primary btn-extra-sm" data-toggle="modal" data-target="#markModal{{ medsessionperson.id }}">
+                                Mark manual
+                            </button>
+                            <!-- Delete Button -->
+                            <button type="button" class="btn btn-danger btn-extra-sm delete-person delete-btn" data-medsessionperson-id="{{ medsessionperson.id }}">
+                                Remove from Session
+                            </button>
+                        </div>
+
+                        <!-- Mark Modal -->
+                        <div class="modal fade" id="markModal{{ medsessionperson.id }}" tabindex="-1" role="dialog" aria-labelledby="markModalLabel{{ medsessionperson.id }}" aria-hidden="true">
+                            <div class="modal-dialog" role="document">
+                            <div class="modal-content">
+                        
+                                <!-- Modal Header -->
+                                <div class="modal-header">
+                                <h5 class="modal-title" id="markModalLabel{{ medsessionperson.id }}">Manually mark attendance</h5>
+                                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                    <span aria-hidden="true">&times;</span>
+                                </button>
+                                </div>
+                        
+                                <!-- Modal Body -->
+                                <div class="modal-body">
+                                <form id="markForm{{ medsessionperson.id }}" method="post" action="{% url 'mark_medsessionperson' medsessionperson.id %}">
+                                    {% csrf_token %}
+                                    <!-- Select for Attendance -->
+                                    <div class="form-group">
+                                    <label for="attendance{{ medsessionperson.id }}">Attendance:</label>
+                                    <select id="attendance{{ medsessionperson.id }}" name="attendance" class="form-control">
+                                        {% for value, display in medsessionperson.ATTENDANCE_CHOICES %}
+                                        <option value="{{ value }}" {% if medsessionperson.attendance == value %}selected{% endif %}>{{ display }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    </div>
+                        
+                                    <!-- Select for Status -->
+                                    <div class="form-group">
+                                    <label for="status{{ medsessionperson.id }}">Status:</label>
+                                    <select id="status{{ medsessionperson.id }}" name="status" class="form-control">
+                                        {% for value, display in medsessionperson.STATUS_CHOICES %}
+                                        <option value="{{ value }}" {% if medsessionperson.status == value %}selected{% endif %}>{{ display }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    </div>
+                        
+                                    <!-- Select for Added By -->
+                                    <div class="form-group">
+                                    <label for="added_by{{ medsessionperson.id }}">Added by:</label>
+                                    <select id="added_by{{ medsessionperson.id }}" name="added_by" class="form-control">
+                                        {% for value, display in medsessionperson.ADDED_CHOICES %}
+                                        <option value="{{ value }}" {% if medsessionperson.added_by == value %}selected{% endif %}>{{ display }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    </div>
+                        
+                                    <!-- Modal Footer -->
+                                    <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                                    <button type="submit" class="btn btn-primary">Save changes</button>
+                                    </div>
+                                </form>
+                                </div>
+                        
+                            </div>
+                            </div>
+                        </div>
+
                         <!-- correct Modal -->
-                        <div class="modal fade" id="correctModal{{ person.id }}" tabindex="-1" role="dialog" aria-labelledby="correctModalLabel{{ person.id }}" aria-hidden="true">
+                        <div class="modal fade" id="correctModal{{ medsessionperson.id }}" tabindex="-1" role="dialog" aria-labelledby="correctModalLabel{{ medsessionperson.id }}" aria-hidden="true">
                             <div class="modal-dialog" role="document">
                                 <div class="modal-content">
                                     <div class="modal-header">
-                                        <h5 class="modal-title" id="correctModalLabel{{ person.id }}">Correct Person</h5>
+                                        <h5 class="modal-title" id="correctModalLabel{{ medsessionperson.id }}">Fix detected face with another student</h5>
                                         <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                                             <span aria-hidden="true">&times;</span>
                                         </button>
@@ -311,16 +763,50 @@
                                     }</style>
                                     
                                     <div class="modal-body">
-                                        <form id="correctForm{{ person.id }}" action="{% url 'correct_person' person.id %}">
+
+                                        <form id="correctForm{{ medsessionperson.id }}" action="{% url 'correct_person' medsessionperson.id %}">
+                                            <!-- Add a hidden input field for the medsession_id -->                                           
+                                            <!-- Images -->
+                                            <div class="row">
+                                                <!-- Detected Face -->
+                                                <div class="col-md-6">
+                                                    <div class="card">
+                                                        <div class="card-body text-center">
+                                                            <h5 class="card-title">Detected Face</h5>
+                                                            {% if medsessionperson.image_url %}
+                                                                <a href="{{ medsessionperson.image_url }}" target="_blank">
+                                                                    <img src="{{ medsessionperson.image_url }}" alt="{{ medsessionperson.elected_label }}" class="img-thumbnail" style="max-width: 100px;">
+                                                                </a>
+                                                                <p class="card-text mt-2 badge badge-primary">{{ medsessionperson.elected_label }}</p>
+                                                            {% endif %}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                
+                                                <!-- Person's Photo -->
+                                                <div class="col-md-6">
+                                                    <div class="card">
+                                                        <div class="card-body text-center">
+                                                            <h5 class="card-title">Person's Photo</h5>
+                                                            <a id="studentImageLink{{ medsessionperson.id }}" href="{{ medsessionperson.person.personal_photo_url }}" target="_blank">
+                                                                <img id="studentImage{{ medsessionperson.id }}" src="{{ medsessionperson.person.personal_photo_url }}" alt="Student Photo" class="img-thumbnail" style="max-width: 100px;">
+                                                            </a>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                 
+                                            <!-- Select -->
+                                            <div class="form-group mt-3">
+                                                <label for="corrected_label{{ medsessionperson.id }}">Correct Label:</label>
+                                                <select name="corrected_label" id="corrected_label{{ medsessionperson.id }}" class="form-control scrollable-dropdown" onchange="changeImage(this.value, {{ medsessionperson.id }})">
+                                                    {% for student in students_in_medsessionpersons %}
+                                                        <option value="{{ student.label }}" data-img="{{ student.personal_photo_url }}" {% if student.label == medsessionperson.corrected_label %}selected{% endif %}>{{ student.label }}</option>
+                                                    {% endfor %}
+                                                </select>
+                                            </div>
                                             
-                                            <select name="corrected_label" id="corrected_label{{ person.id }}" class="scrollable-dropdown" onchange="changeImage(this.value, {{ person.id }})">
-                                                {% for student in students %}
-                                                    <option value="{{ student.label }}" data-img="{{ student.personal_photo_url }}" {% if student.label == person.corrected_label %}selected{% endif %}>{{ student.label }}</option>
-                                                {% endfor %}
-                                            </select>
-                                            <a id="studentImageLink{{ person.id }}" href="{{ person.personal_photo_url }}" target="_blank">
-                                                <img id="studentImage{{ person.id }}" src="{{ person.personal_photo_url }}" alt="Student Photo" class="img-thumbnail my-3" style="max-width: 100px;"/>
-                                            </a>
+                                            <!-- Modal Footer -->
                                             <div class="modal-footer">
                                                 <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
                                                 <button type="submit" class="btn btn-primary">Save changes</button>
@@ -331,17 +817,66 @@
                                 </div>
                             </div>
                         </div>
+
                     </td>
                 </tr>
             {% empty %}
                 <tr>
-                    <td colspan="4" class="text-center text-muted">No persons found for this medsession.</td>
+                    <td colspan="8" class="text-center text-muted">No persons found for this medsession.</td>
                 </tr>
             {% endfor %}
         </tbody>
     </table>
 </div>
+
 <script>
+$(document).ready(function() {
+    $('form[id^="markForm"]').each(function() {
+        var form = $(this);
+        // When this form is submitted
+        form.on('submit', function(event) {
+            var formData = form.serialize();
+            // Print form data to the console
+            console.log(formData);
+            // Prevent the form from being submitted normally
+            event.preventDefault();
+
+            // Send an AJAX request to the server
+            $.ajax({
+                url: form.attr('action'),  // The URL to send the request to
+                method: 'POST',  // The HTTP method to use for the request
+                data: form.serialize(),  // The data to send to the server
+                success: function(response) {  // The function to call if the request is successful
+                    // Show a success message
+                    // alert('Attendance marked successfully.');
+
+                    // Close the modal
+                    form.closest('.modal').modal('hide');
+
+                    // Reload the page
+                    location.reload();
+                },
+                error: function(response) {  // The function to call if the request fails
+                    // Show an error message
+                    alert('An error occurred. Please try again.');
+                }
+            });
+        });
+    });
+
+    if ($('#medsessionpersons_table tbody tr').length > 1) {
+        $('#medsessionpersons_table').DataTable({
+            "searching": true,
+            "pageLength": 100, // Display 100 entries by default
+            "order": [[ 0, "asc" ], [1, "asc"]], // Sort by the first column and then by the second column in ascending order
+            "columnDefs": [
+                { "orderable": false, "targets": [3, 5,  7] } // Disable sorting on the 4th, 6th, and 8th column
+            ],
+            "stateSave": true // Enable state saving
+        });
+    }
+});
+
 function changeImage(value, id) {
     var selectElement = document.getElementById("corrected_label" + id);
     var selectedOption = selectElement.options[selectElement.selectedIndex];
@@ -354,10 +889,10 @@ function changeImage(value, id) {
 }
 
 $(document).ready(function() {
-    $('#corrected_label{{ person.id }}').select2();
+    $('#corrected_label{{ medsessionperson.id }}').select2();
 
     $('.delete-person').on('click', function() {
-        var personId = $(this).data('person-id');
+        var medsessionpersonId = $(this).data('medsessionperson-id');
         var confirmation = confirm('Are you sure you want to delete this person? This action cannot be undone.');
 
         if (confirmation) {
@@ -365,9 +900,9 @@ $(document).ready(function() {
                 type: 'POST',
                 url: '{% url "delete_person" %}',
                 data: {
-                    'person_id': personId,
+                    'medsessionperson_id': medsessionpersonId,
                     'csrfmiddlewaretoken': '{{ csrf_token }}',
-                },
+                }, 
                 success: function(data) {
                     alert(data.message);
                     location.reload();
@@ -377,27 +912,6 @@ $(document).ready(function() {
     });
 });
 
-$(document).ready(function() {
-    //...
-    
-    // Handle the submission of the add person form
-    $('#addPersonForm').on('submit', function(e) {
-        e.preventDefault();
-        var form = $(this);
-        var url = form.attr('action');
-    
-        $.ajax({
-        type: 'POST',
-        url: url,
-        data: form.serialize(),
-        success: function(data) {
-            alert(data.message);
-            $('#addPersonModal').modal('hide');
-            location.reload();
-        }
-        });
-    });
-    });
 
 $(document).ready(function() {
     $('[id^=correctForm]').on('submit', function(e) {

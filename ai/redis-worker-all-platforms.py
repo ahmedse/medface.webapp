@@ -38,6 +38,8 @@ import argparse
 import signal
 import sys
 import logging
+import concurrent.futures
+# from tenacity import retry, stop_after_attempt, wait_exponential
 
 # setup argument parsing
 parser = argparse.ArgumentParser(description="redis-worker Service")
@@ -54,8 +56,6 @@ loglevel = getattr(logging, args.loglevel)
 logging.basicConfig(filename='redisworker_service.log', level=loglevel) # /var/log/medface/
 logger = logging.getLogger(__name__)
 
-
-    
 def report_task_status(task, status, status_message, progress, start_time):
     # Check if status is a valid choice
     valid_status_choices = [choice[0] for choice in TaskStatus.STATUS_CHOICES]
@@ -123,21 +123,9 @@ def update_medsessionpersons(unique_persons, medsession):
     #         attendance = '1', # present
     #         status='2',  # Set status to 'AI' for newly created MedsessionPersons
     #     )
-
-import signal
-
-class TimeoutException(Exception):   # Custom exception class
-    pass
-
-def timeout_handler(signum, frame):   # Custom signal handler
-    raise TimeoutException
-
-# Change the behavior of SIGALRM
-signal.signal(signal.SIGALRM, timeout_handler)
-
+   
 def reprocess_medsession(medsession_id):           
     try:
-        signal.alarm(10*60)  # 10 minutes alarm
         start_time = time.time()
         logger.debug(f"medsession_id: {medsession_id}") 
         print(f"medsession_id: {medsession_id}")
@@ -162,19 +150,24 @@ def reprocess_medsession(medsession_id):
         # Perform face recognition and create MedsessionPerson objects                
         faces_df = ai.extract_faces(medsession_dir)
         logger.info(f"Extracted faces: {len(faces_df)}") 
+        print(f"[DEBUG] Extracted faces: {len(faces_df)}")
         report_task_status(task, 'PROG', f'Faces detection: Extracted {len(faces_df)} faces', 25, start_time)  
 
-        report_task_status(task, 'PROG', f'Person recognition: Recognizing persons', 30, start_time)       
+        report_task_status(task, 'PROG', f'Person recognition: Recognizing persons', 30, start_time)               
         person_df = ai.query_models(faces_df)
+        print(f"[DEBUG] Queried models: {len(person_df)}")
         logger.info(f"Queried models: {len(person_df)}")        
         report_task_status(task, 'PROG', f'Person recognition: Recognized {len(person_df)} persons', 50, start_time)
 
         report_task_status(task, 'PROG', f'Sorting: AI magic started', 55, start_time)
         elected = ai.elect_answer(person_df)
+        print(f"[DEBUG] Elected answers: {len(elected)}")
         logger.info(f"Elected answers: {len(elected)}")        
         report_task_status(task, 'PROG', f'Sorting: Keep doing magic', 75, start_time)
 
+        # unique_persons = handle_timeout(ai.remove_duplicates, timeout_seconds, elected)
         unique_persons = ai.remove_duplicates(elected)
+        print(f"[DEBUG] Unique persons: {len(unique_persons)}")
         logger.info(f"Unique persons: {len(unique_persons)}")        
         report_task_status(task, 'PROG', f'Finishing: AI saw {len(person_df)} persons', 90, start_time)
 
@@ -183,23 +176,22 @@ def reprocess_medsession(medsession_id):
         report_task_status(task, 'PROG', f'Finishing: Saved in database', 99, start_time)
         # logger.info(f"Created MedsessionPerson records: {len(medsession_persons)}")        
         # If everything is successful, log a success message
+        print(f"[DEBUG] Medsession {medsession_id} processed successfully.")
         logger.info(f"Medsession {medsession_id} processed successfully.")
         report_task_status(task, 'DONE', f'completed', 100, start_time)
         total_time = time.time() - start_time
+        print(f"Total processing time: {total_time:.2f} seconds.")
         logger.info(f"Total processing time: {total_time:.2f} seconds.")
         return True
-    except TimeoutException:
-        logger.error(f"Processing medsession {medsession_id} timed out.")
-        report_task_status(task, 'FAIL', f'[ERROR] Processing medsession {medsession_id} timed out.', 0, start_time)
     except Http404:
+        print(f"[DEBUG] Medsession with id {medsession_id} not found.")
         logger.error(f"Medsession with id {medsession_id} not found.")
         report_task_status(task, 'FAIL', f'[ERROR] Medsession with id {medsession_id} not found.', 0, start_time)
     except Exception as e:
+        print(f"[DEBUG] An unexpected error occurred while processing medsession {medsession_id}: {str(e)}.")
         logger.error(f"An unexpected error occurred while processing medsession {medsession_id}: {str(e)}", exc_info=True)
         print(f"An unexpected error occurred while processing medsession {medsession_id}: {str(e)}")
         report_task_status(task, 'FAIL', f'[ERROR] An unexpected error occurred while processing medsession {medsession_id}: {str(e)}.', 0, start_time)
-    finally:
-        signal.alarm(0)  # Cancel the alarm if the function has returned before timeout
 
 def cleanup_tasks():
     ten_minutes_ago = datetime.now() - timedelta(minutes=10)
@@ -227,15 +219,7 @@ def process_images(message):
     else:
         logger.debug(f"Received non-message: {message['type']}")
 
-def signal_handler(sig, frame):
-    logger.info('Received shutdown signal')
-    sys.exit(0)
-
 if __name__ == "__main__":    
-    # Register signal handlers
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
-
     r = redis.Redis(host='localhost', port=6379, db=0)    
     p = r.pubsub()
     p.subscribe(**{'medsession-channel': process_images})
@@ -250,7 +234,7 @@ if __name__ == "__main__":
                 print(f"Got message: {message}")
                 process_images(message)
             # Cleanup every 10 seconds
-            if datetime.now() - last_cleanup > timedelta(seconds=10):
+            if datetime.now() - last_cleanup > timedelta(seconds= 60):
                 cleanup_tasks()
                 last_cleanup = datetime.now()
         except Exception as e:
