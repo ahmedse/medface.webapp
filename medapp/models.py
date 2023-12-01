@@ -66,7 +66,7 @@ class Person(models.Model):
     year_b = models.CharField(max_length=20, default='22-26')
     group = models.CharField(max_length=2, choices=GROUP_CHOICES)
     label = models.CharField(max_length=100, default='')
-    
+    personal_photo_url = models.URLField(blank=True, null=True)  # new field
     modifytime = models.DateTimeField(auto_now=True)
 
 class Image(models.Model):

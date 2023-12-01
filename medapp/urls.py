@@ -4,7 +4,7 @@ from . import views
 from django.conf import settings
 from django.conf.urls.static import static
 from .views import reprocess_images, upload_image, delete_image, medsession_persons, download_pdf, correct_person, add_person
-from .views import get_task_status, delete_person, manage_groups, mark_medsessionperson
+from .views import get_task_status, delete_person, manage_groups, mark_medsessionperson, attendance_list_calendar
 
 urlpatterns = [
     path('medsession_list/', MedsessionListView.as_view(), name='medsession_list'),
@@ -32,6 +32,9 @@ urlpatterns = [
        
     path('create_person/', create_person, name='create_person'),
     path('person_list/', PersonListView.as_view(), name='person_list'),
+
+    path('attendance_list_calendar/', views.attendance_list_calendar, name='attendance_list_calendar'),
+    path('medsession_data_calendar/', views.medsession_data_calendar, name='medsession_data_calendar'),
 ]
 
 # for debug purposes

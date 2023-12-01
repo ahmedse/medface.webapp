@@ -47,7 +47,7 @@ parser.add_argument(
     '--loglevel', 
     help='Set log level', 
     choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], 
-    default='DEBUG' # INFO
+    default='ERROR' # INFO, ERRORS, DEBUG
 )
 args = parser.parse_args()
 
@@ -102,95 +102,78 @@ def update_medsessionpersons(unique_persons, medsession):
             medsessionperson.status = '5'
             medsessionperson.save()
 
-    # # Create new MedsessionPerson instances for the remaining unique_persons
-    # for person_label in unique_persons_set:
-    #     person_data = unique_persons[unique_persons['elected_label'] == person_label].iloc[0]
-    #     regno, fullname = person_label.split('_')
-    #     person_obj = Person.objects.get(regno=regno, fullname=fullname)
-    #     MedsessionPerson.objects.create(
-    #         medsession=medsession,
-    #         person=person_obj,
-    #         box=str(person_data['box']),
-    #         confidence=person_data['confidence'],
-    #         image_path=person_data['image_path'],            
-    #         resnet50_label=person_data['resnet50_label'],
-    #         resnet50_confidence=person_data['resnet50_confidence'],
-    #         senet50_label=person_data['senet50_label'],
-    #         senet50_confidence=person_data['senet50_confidence'],
-    #         vgg16_label=person_data['vgg16_label'],
-    #         vgg16_confidence=person_data['vgg16_confidence'],
-    #         elected_label=person_data['elected_label'],
-    #         attendance = '1', # present
-    #         status='2',  # Set status to 'AI' for newly created MedsessionPersons
-    #     )
-   
+
 def reprocess_medsession(medsession_id):           
     try:
         start_time = time.time()
-        logger.debug(f"medsession_id: {medsession_id}") 
-        print(f"medsession_id: {medsession_id}")
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"medsession_id: {medsession_id}") 
+
         medsession = u.get_object_or_404(Medsession, sessionid=medsession_id)
         task, created = TaskStatus.objects.get_or_create(medsession=medsession)
-        print(f"task_status  created: {task}")
-        # Update the task status
+
         report_task_status(task, 'INIT', 'Initializing', 0, start_time)
         
         medsession_dir = u.get_medsession_images_dir(medsession)
-        logger.info(f"Medsession directory: {medsession_dir}")        
+        if logger.isEnabledFor(logging.INFO):
+            logger.info(f"Medsession directory: {medsession_dir}")        
+
         if not os.path.exists(medsession_dir):
-            logger.info(f"Medsession directory does not exist: {medsession_dir}")
+            if logger.isEnabledFor(logging.INFO):
+                logger.info(f"Medsession directory does not exist: {medsession_dir}")
             return True
-        # with transaction.atomic():
-        #     # Delete medsession_persons related to this medsession
-        #     deleted_count = MedsessionPerson.objects.filter(medsession=medsession).delete()
-        #     logger.info(f"Deleted {deleted_count} MedsessionPerson records.")   
 
         report_task_status(task, 'PROG', 'Faces detection: Extract faces', 5, start_time)
         
-        # Perform face recognition and create MedsessionPerson objects                
         faces_df = ai.extract_faces(medsession_dir)
-        logger.info(f"Extracted faces: {len(faces_df)}") 
-        print(f"[DEBUG] Extracted faces: {len(faces_df)}")
-        report_task_status(task, 'PROG', f'Faces detection: Extracted {len(faces_df)} faces', 25, start_time)  
+        num_faces = len(faces_df)
+        if logger.isEnabledFor(logging.INFO):
+            logger.info(f"Extracted faces: {num_faces}") 
+
+        report_task_status(task, 'PROG', f'Faces detection: Extracted {num_faces} faces', 25, start_time)  
 
         report_task_status(task, 'PROG', f'Person recognition: Recognizing persons', 30, start_time)               
         person_df = ai.query_models(faces_df)
-        print(f"[DEBUG] Queried models: {len(person_df)}")
-        logger.info(f"Queried models: {len(person_df)}")        
-        report_task_status(task, 'PROG', f'Person recognition: Recognized {len(person_df)} persons', 50, start_time)
+        num_persons = len(person_df)
+        if logger.isEnabledFor(logging.INFO):
+            logger.info(f"Queried models: {num_persons}")        
+
+        report_task_status(task, 'PROG', f'Person recognition: Recognized {num_persons} persons', 50, start_time)
 
         report_task_status(task, 'PROG', f'Sorting: AI magic started', 55, start_time)
         elected = ai.elect_answer(person_df)
-        print(f"[DEBUG] Elected answers: {len(elected)}")
-        logger.info(f"Elected answers: {len(elected)}")        
+        num_elected = len(elected)
+        if logger.isEnabledFor(logging.INFO):
+            logger.info(f"Elected answers: {num_elected}")        
+
         report_task_status(task, 'PROG', f'Sorting: Keep doing magic', 75, start_time)
 
-        # unique_persons = handle_timeout(ai.remove_duplicates, timeout_seconds, elected)
         unique_persons = ai.remove_duplicates(elected)
-        print(f"[DEBUG] Unique persons: {len(unique_persons)}")
-        logger.info(f"Unique persons: {len(unique_persons)}")        
-        report_task_status(task, 'PROG', f'Finishing: AI saw {len(person_df)} persons', 90, start_time)
+        num_unique_persons = len(unique_persons)
+        if logger.isEnabledFor(logging.INFO):
+            logger.info(f"Unique persons: {num_unique_persons}")        
+
+        report_task_status(task, 'PROG', f'Finishing: AI saw {num_persons} persons', 90, start_time)
 
         update_medsessionpersons(unique_persons, medsession)
         
         report_task_status(task, 'PROG', f'Finishing: Saved in database', 99, start_time)
-        # logger.info(f"Created MedsessionPerson records: {len(medsession_persons)}")        
-        # If everything is successful, log a success message
-        print(f"[DEBUG] Medsession {medsession_id} processed successfully.")
-        logger.info(f"Medsession {medsession_id} processed successfully.")
+
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"Medsession {medsession_id} processed successfully.")
+
         report_task_status(task, 'DONE', f'completed', 100, start_time)
         total_time = time.time() - start_time
-        print(f"Total processing time: {total_time:.2f} seconds.")
-        logger.info(f"Total processing time: {total_time:.2f} seconds.")
+        if logger.isEnabledFor(logging.INFO):
+            logger.info(f"Total processing time: {total_time:.2f} seconds.")
         return True
     except Http404:
-        print(f"[DEBUG] Medsession with id {medsession_id} not found.")
-        logger.error(f"Medsession with id {medsession_id} not found.")
+        if logger.isEnabledFor(logging.ERROR):
+            logger.error(f"Medsession with id {medsession_id} not found.")
         report_task_status(task, 'FAIL', f'[ERROR] Medsession with id {medsession_id} not found.', 0, start_time)
     except Exception as e:
-        print(f"[DEBUG] An unexpected error occurred while processing medsession {medsession_id}: {str(e)}.")
-        logger.error(f"An unexpected error occurred while processing medsession {medsession_id}: {str(e)}", exc_info=True)
-        print(f"An unexpected error occurred while processing medsession {medsession_id}: {str(e)}")
+        if logger.isEnabledFor(logging.ERROR):
+            logger.error(f"An unexpected error occurred while processing medsession {medsession_id}: {str(e)}", exc_info=True)
         report_task_status(task, 'FAIL', f'[ERROR] An unexpected error occurred while processing medsession {medsession_id}: {str(e)}.', 0, start_time)
 
 def cleanup_tasks():
@@ -239,4 +222,4 @@ if __name__ == "__main__":
                 last_cleanup = datetime.now()
         except Exception as e:
             logger.error(f"An error occurred while getting message: {str(e)}", exc_info=True)
-        time.sleep(1)  # sleep just 1 second        
+        time.sleep(.1)  # sleep just 1 second        

@@ -169,7 +169,8 @@ def medsession_persons(request, medsession_id):
     logger.debug("Found medsession: %s", medsession)
     logger.debug("Getting persons for medsession %s", medsession)
 
-    medsessionpersons = MedsessionPerson.objects.filter(medsession=medsession)
+    # medsessionpersons = MedsessionPerson.objects.filter(medsession=medsession)
+    medsessionpersons = MedsessionPerson.objects.select_related('person').filter(medsession=medsession)
 
     groups = (Person.objects
               .filter(year=medsession.year)
@@ -198,8 +199,10 @@ def medsession_persons(request, medsession_id):
 
     # Check if there are any images, students, or persons
     no_images = not bool(src_image_data)
-    no_students = students_in_medsession_year.count() == 0
-    no_medsessionpersons = medsessionpersons.count() == 0
+    # no_students = students_in_medsession_year.count() == 0
+    # no_medsessionpersons = medsessionpersons.count() == 0
+    no_students = not students_in_medsession_year.exists()
+    no_medsessionpersons = not medsessionpersons.exists()
 
     logger.info(f"src_image_data: {src_image_data}")
     
@@ -218,18 +221,33 @@ def medsession_persons(request, medsession_id):
             students_in_medsession_year, 
             key=lambda student: (int(student.group), student.fullname)
         )
+    
+    updated_people = []
+    updated_medsessionpersons = []
 
     for medsessionperson in medsessionpersons:
-        label = get_person_label(medsessionperson.person)
-        medsessionperson.person.personal_photo_url = get_personal_photo_url(label)
-        # print(f"[DEBUG] medsessionperson.person.personal_photo_url: {medsessionperson.person.personal_photo_url}")
+        person = medsessionperson.person
+        label = get_person_label(person)
 
-        medsessionperson.image_url = get_medsessionperson_face_url(medsession, label, medsessionperson.status, medsessionperson.image_path, medsessionperson.box)
+        # Check if the personal_photo_url exists, if not, get it, update and use.
+        if not person.personal_photo_url:
+            new_personal_photo_url = get_personal_photo_url(label)
+            if new_personal_photo_url:  # Check if the URL obtained is not None or empty
+                person.personal_photo_url = new_personal_photo_url
+                updated_people.append(person)
 
-        medsessionperson.added_by = '1' if medsessionperson.corrected_label else '0'
-        medsessionperson.save()
+        # Check if the image_url exists, if not, get it, update and use.
+        if not medsessionperson.box and not medsessionperson.image_url:
+            new_image_url = get_medsessionperson_face_url(medsession, label, medsessionperson.status, medsessionperson.image_path, medsessionperson.box)
+            if new_image_url:  # Check if the URL obtained is not None or empty
+                medsessionperson.image_url = new_image_url
+                updated_medsessionpersons.append(medsessionperson)
+
+    # Bulk update all modified Person instances.
+    Person.objects.bulk_update(updated_people, ['personal_photo_url'])
+    MedsessionPerson.objects.bulk_update(updated_medsessionpersons, ['image_url'])
         
-        # print(f"[DEBUG] medsession.sessionid = {medsession.sessionid}")
+    # print(f"[DEBUG] medsession.sessionid = {medsession.sessionid}")
     return render(request, 'medapp/medsession_persons.html', {'src_image_data': src_image_data, 
                                                                'medsession': medsession, 
                                                                'medsessionpersons': medsessionpersons, 
@@ -771,3 +789,43 @@ def export_medsessionpersons(request, sessionid):
     response['Content-Disposition'] = f'attachment; filename=Year_{medsession.year}_Term_{medsession.term}_Day_{medsession.day}_Period_{medsession.period}_Room_{medsession.room}.xlsx'
 
     return response
+
+
+def attendance_list_calendar(request):
+    return render(request, 'attendance_list_calendar.html')
+
+
+import datetime
+
+def medsession_data_calendar(request):
+    medsessions = Medsession.objects.all()  # Or filter as needed
+
+    # Define your period times
+    period_times = {
+        1: ('09:00:00', '10:30:00'),
+        2: ('11:00:00', '12:30:00'),
+        3: ('13:00:00', '14:30:00'),
+        # Add more if you have more periods
+    }
+
+    medsession_list = []
+    for medsession in medsessions:
+        # Construct the title
+        title = f"Year {medsession.year} - Term {medsession.term} - Room {medsession.room} - {medsession.course if medsession.course else ''}"
+        
+        # Get the start and end times for this medsession's period
+        start_time, end_time = period_times[int(medsession.period)]
+        
+        # Construct the start and end datetime strings
+        start = f"{medsession.day}T{start_time}"  # assuming day is a date string in format 'YYYY-MM-DD'
+        end = f"{medsession.day}T{end_time}"  # assuming day is a date string in format 'YYYY-MM-DD'
+        
+        medsession_list.append({
+            'id': medsession.sessionid,
+            'title': title,
+            'start': start,
+            'end': end,
+            # Add other properties as needed
+        })
+
+    return JsonResponse(medsession_list, safe=False)
