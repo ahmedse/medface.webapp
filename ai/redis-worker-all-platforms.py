@@ -47,7 +47,7 @@ parser.add_argument(
     '--loglevel', 
     help='Set log level', 
     choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], 
-    default='ERROR' # INFO, ERRORS, DEBUG
+    default='DEBUG' # INFO, ERRORS, DEBUG
 )
 args = parser.parse_args()
 
@@ -140,13 +140,13 @@ def reprocess_medsession(medsession_id):
 
         report_task_status(task, 'PROG', f'Person recognition: Recognized {num_persons} persons', 50, start_time)
 
-        report_task_status(task, 'PROG', f'Sorting: AI magic started', 55, start_time)
+        report_task_status(task, 'PROG', f'Sorting: started', 55, start_time)
         elected = ai.elect_answer(person_df)
         num_elected = len(elected)
         if logger.isEnabledFor(logging.INFO):
             logger.info(f"Elected answers: {num_elected}")        
 
-        report_task_status(task, 'PROG', f'Sorting: Keep doing magic', 75, start_time)
+        report_task_status(task, 'PROG', f'Sorting: Keep doing sorting', 75, start_time)
 
         unique_persons = ai.remove_duplicates(elected)
         num_unique_persons = len(unique_persons)

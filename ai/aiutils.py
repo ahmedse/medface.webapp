@@ -79,8 +79,7 @@ def correct_image_orientation(image_path):
         # Cases: image don't have getexif
         raise ValidationError(f"Image could not be oriented correctly. Error: {str(e)}")
 
-
-def detect_faces(img_cv2, min_size=(40, 40)):
+def detect_faces(img_cv2, min_size, confidence_threshold):
     start_time = time.time()
     detected_faces = []
     faces = w_detect_face(img_cv2)
@@ -88,12 +87,15 @@ def detect_faces(img_cv2, min_size=(40, 40)):
     if faces:
         for face in faces:
             box, confidence = face['box'], face['confidence']
+            if confidence < confidence_threshold:
+                logger.debug(f"Face confidence {confidence} lower than threshold {confidence_threshold}. Skipping.")
+                continue
             x, y, width, height = box
             if width < min_size[0] or height < min_size[1]:
                 logger.debug(f"Face size {width, height} smaller than minimum size {min_size}. Skipping.")
                 continue
             face_pixels = img_cv2[y: y + height, x: x + width]
-            face_check = w_detect_face(face_pixels)
+            # face_check = w_detect_face(face_pixels)
             if True: # face_check disabled
                 detected_faces.append({
                     'face_pixels': face_pixels,            
@@ -103,7 +105,8 @@ def detect_faces(img_cv2, min_size=(40, 40)):
     logger.debug(f"Detection took {(time.time() - start_time):.2f} seconds. Detected {len(detected_faces)} faces.")
     return detected_faces
 
-def extract_faces(medsession_dir, min_size=(50, 50)):
+
+def extract_faces(medsession_dir, min_size=(50, 50), confidence_threshold=0.6):
     start_time = time.time()
     faces_df = []
     face_count = 0
@@ -118,7 +121,7 @@ def extract_faces(medsession_dir, min_size=(50, 50)):
             img = np.array(img, dtype='uint8')
             img_cv2 = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
             logger.debug(f'image: {file_path}, size: {len(np.array(img))}')
-            detected_faces = detect_faces(img_cv2, min_size)
+            detected_faces = detect_faces(img_cv2, min_size, confidence_threshold)
             if not detected_faces:
                 logger.debug(f'No faces detected in the image: {file_path}.')
                 continue
@@ -131,7 +134,7 @@ def extract_faces(medsession_dir, min_size=(50, 50)):
             logger.error(f"Error processing file {file_path}: {e}")
             continue
     faces_df = pd.DataFrame(faces_df)
-    logger.info(f"Extracted {face_count} faces from {len(os.listdir(medsession_dir))} files in {(time.time() - start_time):.2f} seconds.")
+    logger.debug(f"Extracted {face_count} faces from {len(os.listdir(medsession_dir))} files in {(time.time() - start_time):.2f} seconds.")
     return faces_df
 
 def predict_in_batches(face_pixels, model, batch_size=64):
@@ -141,11 +144,11 @@ def predict_in_batches(face_pixels, model, batch_size=64):
         batch = face_pixels[i:i+batch_size]
         batch_predictions = model.predict(batch)
         predictions.extend(batch_predictions)
-    logger.debug(f"Prediction took {(time.time() - start_time):.2f} seconds. Made {len(predictions)} predictions.")
+    end_time = time.time()
+    logger.debug(f"Prediction took {(end_time - start_time):.2f} seconds. Made {len(predictions)} predictions.")
     return np.array(predictions)
 
-def query_models(faces_df):
-
+def query_models(faces_df, confidence_threshold=0.98):
     # Make a copy of faces_df and reset its index
     person_df = faces_df.copy()
     person_df.reset_index(drop=True, inplace=True)
@@ -171,33 +174,83 @@ def query_models(faces_df):
     # Load each model and make predictions
     for model_name, model in models.items():
         logger.debug(f"Making predictions with {model_name} model...")
-        predictions = predict_in_batches(face_pixels, model, batch_size=32)
+        predictions = predict_in_batches(face_pixels, model, batch_size=64)
 
         logger.debug("Updating DataFrame with predictions...")
-        class_indices = np.argmax(predictions, axis=1)
         class_confidences = np.max(predictions, axis=1)
+        class_indices = [np.argmax(pred) if conf >= confidence_threshold else None for pred, conf in zip(predictions, class_confidences)]
 
-        person_df[model_name + '_label'] = [class_labels[i] for i in class_indices]
+        person_df[model_name + '_label'] = [class_labels[i] if i is not None else None for i in class_indices]
         person_df[model_name + '_confidence'] = class_confidences
+
+        above_threshold_predictions = sum(conf >= confidence_threshold for conf in class_confidences)
+        logger.debug(f"Made {above_threshold_predictions} predictions above the confidence threshold of {confidence_threshold}.")
+        logger.debug(f"Average confidence of predictions: {np.mean([conf for conf in class_confidences if conf >= confidence_threshold]):.4f}.")
 
         logger.debug(f"Completed predictions with {model_name} model.")
     return person_df
 
-def elect_answer(person_df):
+
+import numpy as np
+from collections import Counter
+import time
+import logging
+
+# Set up logger
+logger = logging.getLogger(__name__)
+
+def elect_answer(person_df, weights=[0.1, 0.3, 0.5]):
     start_time = time.time()
     # New column for elected label
-    person_df['elected_label'] = ''
-    
+    person_df['elected_label'] = ''    
+    for i, person in person_df.iterrows():
+        labels = [person['vgg16_label'], person['resnet50_label'], person['senet50_label']]
+        confidences = np.array([person['vgg16_confidence'], person['resnet50_confidence'], person['senet50_confidence']])        
+
+        # Majority voting
+        label_counts = Counter(labels)
+        max_count_label = label_counts.most_common(1)[0][0]
+        print(f"Majority voting label for row {i}: {max_count_label}")
+        logger.debug(f"Majority voting label for row {i}: {max_count_label}")
+
+        # Weighted voting
+        weighted_confidences = confidences * weights
+        max_weighted_label = labels[np.argmax(weighted_confidences)]
+        print(f"Weighted voting label for row {i}: {max_weighted_label}")
+        logger.debug(f"Weighted voting label for row {i}: {max_weighted_label}")
+
+        # Average probabilities
+        avg_probability_label = labels[np.argmax(confidences.mean(axis=0))]
+        print(f"Average probabilities label for row {i}: {avg_probability_label}")
+        logger.debug(f"Average probabilities label for row {i}: {avg_probability_label}")
+
+        # Final decision
+        final_decision = Counter([max_count_label
+                                  , max_weighted_label
+                                  , avg_probability_label]).most_common(1)[0][0]
+        # person_df.loc[i, 'elected_label'] = final_decision
+        person_df.loc[i, 'elected_label'] = final_decision
+
+        print(f"Elected label for row {i}: {final_decision}")
+        logger.debug(f"Elected label for row {i}: {final_decision}")
+
+    logger.info(f"Elected answers for {len(person_df)} rows in {(time.time() - start_time):.2f} seconds.")
+    print(f"Elected answers for {len(person_df)} rows in {(time.time() - start_time):.2f} seconds.")
+    return person_df
+
+
+def elect_answer2(person_df):
+    start_time = time.time()
+    # New column for elected label
+    person_df['elected_label'] = ''    
     for i, person in person_df.iterrows():
         # logger.debug(f"Processing row {i}...")
         
         labels = [person['resnet50_label'], person['senet50_label'], person['vgg16_label']]
-        confidences = [person['resnet50_confidence'], person['senet50_confidence'], person['vgg16_confidence']]
-        
+        confidences = [person['resnet50_confidence'], person['senet50_confidence'], person['vgg16_confidence']]        
         # Count the occurrences of each label
         label_counts = {label: labels.count(label) for label in labels}
-        # logger.debug(f"label counts: {label_counts}")
-        
+        # logger.debug(f"label counts: {label_counts}")        
         # Find the label(s) with the maximum count
         max_count = max(label_counts.values())
         max_labels = [label for label, count in label_counts.items() if count == max_count]
@@ -232,8 +285,8 @@ def remove_duplicates(elected):
     unique_persons = elected.drop_duplicates(subset='elected_label')
     logger.debug(f"Total records after removing duplicates: {len(unique_persons)}")
     
-    # Split 'elected_label' and create a new column 'name'
-    unique_persons['fullname'] = unique_persons['elected_label'].apply(lambda x: x.split('_')[1] if '_' in x else x)    
+    # Split 'elected_label' and create a new column 'name' 
+    unique_persons['fullname'] = unique_persons['elected_label'].apply(lambda x: x.split('_')[1] if x and '_' in x else x)
     # Sort DataFrame by 'name' in ascending order
     unique_persons_sorted = unique_persons.sort_values(by='fullname', ascending=True)    
     logger.debug("Sorted by fullname")

@@ -39,19 +39,9 @@ import signal
 import sys
 import logging
 
-# setup argument parsing
-parser = argparse.ArgumentParser(description="redis-worker Service")
-parser.add_argument(
-    '--loglevel', 
-    help='Set log level', 
-    choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], 
-    default='DEBUG' # INFO
-)
-args = parser.parse_args()
-
-# Configure logging
-loglevel = getattr(logging, args.loglevel)
-logging.basicConfig(filename='redisworker_service.log', level=loglevel) # /var/log/medface/
+# Configure logging with a fixed level
+loglevel = logging.INFO
+logging.basicConfig(filename='/var/log/medface/redisworker_service.log', level=loglevel)
 logger = logging.getLogger(__name__)
 
 
@@ -169,10 +159,10 @@ def reprocess_medsession(medsession_id):
         logger.info(f"Queried models: {len(person_df)}")        
         report_task_status(task, 'PROG', f'Person recognition: Recognized {len(person_df)} persons', 50, start_time)
 
-        report_task_status(task, 'PROG', f'Sorting: AI magic started', 55, start_time)
+        report_task_status(task, 'PROG', f'Sorting: started', 55, start_time)
         elected = ai.elect_answer(person_df)
         logger.info(f"Elected answers: {len(elected)}")        
-        report_task_status(task, 'PROG', f'Sorting: Keep doing magic', 75, start_time)
+        report_task_status(task, 'PROG', f'Sorting: Keep doing sorting', 75, start_time)
 
         unique_persons = ai.remove_duplicates(elected)
         logger.info(f"Unique persons: {len(unique_persons)}")        

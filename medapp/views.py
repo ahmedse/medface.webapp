@@ -54,18 +54,6 @@ def get_image_url(image_path):
     image_url = settings.MEDIA_URL + os.path.relpath(image_path, settings.MEDIA_ROOT).replace("\\", "/") 
     return image_url
 
-def get_medsession_images_dir(medsession):
-    """Return the directory where the images for a given medsession are stored."""
-    images_dir = os.path.join(
-        settings.MEDIA_ROOT, 
-        'runs', 
-        str(medsession.year), 
-        str(medsession.term), 
-        str(medsession.day), 
-        str(medsession.period), 
-        str(medsession.room)
-    )
-    return images_dir
 
 def get_medsession_images(medsession):        
     # Calculate medsession path
@@ -73,6 +61,7 @@ def get_medsession_images(medsession):
     
     # List to hold all image URLs and paths
     image_data = []
+
     try:
         # List all files in the directory        
         for filename in os.listdir(medsession_dir):
@@ -92,20 +81,23 @@ def get_medsession_images(medsession):
 
         # Check if any images were added
         if not image_data:
-            raise Http404("No images found in the Medsession directory.")
+            print("No images found in the Medsession directory: %s", medsession_dir)
+            logger.info("No images found in the Medsession directory: %s", medsession_dir)
             
     except FileNotFoundError:
         # Handle the error if the medsession directory does not exist
-        raise Http404("Medsession directory does not exist.")
+        print("Medsession directory does not exist.")
     except PermissionError:
         # Handle the error if there are insufficient permissions to read the directory or a file
-        raise Http404("Insufficient permissions to read the medsession directory or a file.")
+        print("Insufficient permissions to read the medsession directory or a file.")
     except Exception as e:
         # Handle all other exceptions
         logger.error("An error occurred while reading the medsession directory: %s", str(e))
-        raise Http404("An error occurred while reading the medsession directory.")
+        print("An error occurred while reading the medsession directory.")
+
     # Return the list of image URLs and paths
     return image_data
+
 
 def get_label(person):
     """Return the corrected_label if it exists, otherwise return the elected_label."""
@@ -164,7 +156,7 @@ def get_medsessionperson_face_url(medsession, label, status, image_path, box):
 
 def medsession_persons(request, medsession_id):
     # print(f"[DEBUG] inside medsession_persons: {medsession_id}")
-    logger.debug("Getting medsession with sessionid %s", medsession_id)
+    logger.info("Getting medsession with sessionid %s", medsession_id)
     medsession = get_object_or_404(Medsession, sessionid=medsession_id)
     logger.debug("Found medsession: %s", medsession)
     logger.debug("Getting persons for medsession %s", medsession)
@@ -230,6 +222,7 @@ def medsession_persons(request, medsession_id):
         label = get_person_label(person)
 
         # Check if the personal_photo_url exists, if not, get it, update and use.
+        
         if not person.personal_photo_url:
             new_personal_photo_url = get_personal_photo_url(label)
             if new_personal_photo_url:  # Check if the URL obtained is not None or empty
@@ -237,11 +230,12 @@ def medsession_persons(request, medsession_id):
                 updated_people.append(person)
 
         # Check if the image_url exists, if not, get it, update and use.
-        if not medsessionperson.box and not medsessionperson.image_url:
+        if medsessionperson.box and not medsessionperson.image_url:
             new_image_url = get_medsessionperson_face_url(medsession, label, medsessionperson.status, medsessionperson.image_path, medsessionperson.box)
             if new_image_url:  # Check if the URL obtained is not None or empty
                 medsessionperson.image_url = new_image_url
                 updated_medsessionpersons.append(medsessionperson)
+                logger.info("updated_medsessionpersons: (%s)", medsessionperson.image_url)
 
     # Bulk update all modified Person instances.
     Person.objects.bulk_update(updated_people, ['personal_photo_url'])
@@ -309,6 +303,23 @@ def publish_medsession_id_to_redis(medsession_id):
         'message': 'Task started successfully.',
         'status': 'success'
     })
+
+def get_medsession_images_dir(medsession):
+    """Return the directory where the images for a given medsession are stored."""
+    images_dir = os.path.join(
+        settings.MEDIA_ROOT, 
+        'runs', 
+        str(medsession.year), 
+        str(medsession.term), 
+        str(medsession.day), 
+        str(medsession.period), 
+        str(medsession.room)
+    )
+
+    # Create the directory if it doesn't exist
+    os.makedirs(images_dir, exist_ok=True)
+
+    return images_dir
 
 @csrf_exempt
 @require_POST
@@ -415,13 +426,18 @@ def upload_image(request):
         medsession_id = request.POST['medsession_id']
         print(f"[DEBUG] medsession_id: {medsession_id}")
         medsession = get_object_or_404(Medsession, sessionid=medsession_id)
+        
         # time.sleep(20)
         # Ensure an image file was uploaded
         if 'image' not in request.FILES:
             return JsonResponse({'error': 'No image file uploaded'}, status=400)
         image_file = request.FILES['image']
-        fs = FileSystemStorage(location=get_medsession_images_dir(medsession))
+        location=get_medsession_images_dir(medsession)
+        logger.info("Medsession images directory: %s", location)
+        fs = FileSystemStorage(location)
+        logger.info("Medsession images FileSystemStorage: %s", fs)        
         filename = fs.save(image_file.name, image_file)
+        logger.info("Medsession image saved is: %s", filename)    
         return JsonResponse({'message': 'Image uploaded'})
     except Medsession.DoesNotExist:
         return JsonResponse({'error': 'Medsession not found'}, status=404)

@@ -525,13 +525,16 @@ $(document).ready(function() {
             formData.append('image', $('#upload-image')[0].files[0]);
             formData.append('medsession_id', $('#medsession-id').val());
             $('#overlay').show();
+            console.log('AJAX request URL: ', '/upload_image' + '/');
+            
             $.ajax({
                 url: '/upload_image'+ '/',
                 method: 'POST',
                 data: formData,
                 processData: false,
                 contentType: false,
-                headers: {'X-CSRFToken': '{{ csrf_token }}'},
+                headers: {'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()},
+                //headers: {'X-CSRFToken': '{{ csrf_token }}'},
                 success: function() {
                     location.reload();
                 },
