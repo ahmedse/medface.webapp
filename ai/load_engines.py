@@ -34,3 +34,10 @@ vgg16_model = load_model(os.path.join(settings.AI_ROOT, 'vgg16.h5'))
 # Load class labels
 with open(os.path.join(settings.AI_ROOT, 'face-labels.pickle'), 'rb') as f:
     class_labels = pickle.load(f)
+
+# photo enhancer model
+import cv2
+sr_model = cv2.dnn_superres.DnnSuperResImpl_create()
+path = os.path.join(settings.AI_ROOT, 'EDSR_x3.pb') 
+sr_model.readModel(path)
+sr_model.setModel("edsr", 3)
