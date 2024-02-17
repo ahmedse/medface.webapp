@@ -39,7 +39,7 @@
           <td>{{ medsession.lecturer }}</td>
           <td>
             {% if medsession.sessionid %}
-              <a href="{% url 'medsession_edit' medsession.sessionid %}">Edit</a> | 
+              <a href="{% url 'edit_medsession' medsession.sessionid %}">Edit</a>
               <a href="{% url 'medsession_delete' medsession.sessionid %}">Delete</a>
               <a href="{% url 'medsession_persons' medsession.sessionid %}" class="btn btn-info">Details</a>
             {% else %}

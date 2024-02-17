@@ -27,9 +27,13 @@
                     <a class="nav-link" href="{% url 'home' %}">Home</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="{% url 'medsession_list' %}">Medsessions</a>
+                    <a class="nav-link" href="{% url 'medsession_list' %}">Attendance Sessions</a>
                 </li>
                 <!-- Add other menu items here -->
+                <!-- Attendance Sessions -->
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'attendance_list_calendar' %}">Calendar</a>
+                </li>
                 <li class="nav-item">
                     <a class="nav-link" href="{% url 'create_medsession' %}">Add Session</a>
                 </li>

@@ -28,9 +28,16 @@ def capture_output(func):
 detector = MTCNN()
 w_detect_face = capture_output(detector.detect_faces) 
 # ai models
-resnet50_model = load_model(os.path.join(settings.AI_ROOT, 'resnet50_model_1.h5'))
-senet50_model = load_model(os.path.join(settings.AI_ROOT, 'senet50_model_1.h5'))
-vgg16_model = load_model(os.path.join(settings.AI_ROOT, 'vgg16_model_1.h5'))
+resnet50_model = load_model(os.path.join(settings.AI_ROOT, 'resnet50.h5'))
+senet50_model = load_model(os.path.join(settings.AI_ROOT, 'senet50.h5'))
+vgg16_model = load_model(os.path.join(settings.AI_ROOT, 'vgg16.h5'))
 # Load class labels
 with open(os.path.join(settings.AI_ROOT, 'face-labels.pickle'), 'rb') as f:
     class_labels = pickle.load(f)
+
+# photo enhancer model
+import cv2
+sr_model = cv2.dnn_superres.DnnSuperResImpl_create()
+path = os.path.join(settings.AI_ROOT, 'EDSR_x3.pb') 
+sr_model.readModel(path)
+sr_model.setModel("edsr", 3)
