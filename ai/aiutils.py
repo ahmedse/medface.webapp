@@ -102,42 +102,73 @@ def correct_image_orientation(image_path):
         raise ValidationError(f"Image could not be oriented correctly. Error: {str(e)}")
 
 
-def enhance_face(face_pixels):
+def enhance_face2(face_pixels):
     logger.info("Starting enhancement process for face image.")
     # Check if the image is too small
     if face_pixels.shape[0] < 224 or face_pixels.shape[1] < 224:
         logger.info("Image is too small, applying super-resolution.")
         # Upsample the image using the model
         face_pixels = sr_model.upsample(face_pixels)
-        logger.info("Super-resolution applied.")
+        # logger.info("Super-resolution applied.")
         # Resize to an intermediate size larger than the target to downscale later for better quality
         face_pixels = cv2.resize(face_pixels, None, fx=(224/face_pixels.shape[1]), fy=(224/face_pixels.shape[0]), interpolation=cv2.INTER_CUBIC)
-        logger.info("Image resized to intermediate dimensions.")
+        # logger.info("Image resized to intermediate dimensions.")
 
     # Denoise the image
     face_pixels = cv2.fastNlMeansDenoisingColored(face_pixels, None, 10, 10, 7, 21)
-    logger.info("Image denoising applied.")
+    # logger.info("Image denoising applied.")
     # Improve the contrast (Histogram Equalization)
     # Convert to YUV color space
     img_yuv = cv2.cvtColor(face_pixels, cv2.COLOR_BGR2YUV)
-    logger.info("Image converted to YUV color space.")
+    # logger.info("Image converted to YUV color space.")
     # Apply histogram equalization only on the Y channel
     img_yuv[:, :, 0] = cv2.equalizeHist(img_yuv[:, :, 0])
-    logger.info("Histogram equalization applied on Y channel.")
+    # logger.info("Histogram equalization applied on Y channel.")
     # Convert back to BGR color space
     face_pixels = cv2.cvtColor(img_yuv, cv2.COLOR_YUV2BGR)
-    logger.info("Image converted back to BGR color space.")
+    # logger.info("Image converted back to BGR color space.")
     # Resize to the target size (224x224)
     final_face_pixels = cv2.resize(face_pixels, (224, 224), interpolation=cv2.INTER_AREA)
-    logger.info("Image resized to target dimensions.")
+    # logger.info("Image resized to target dimensions.")
     # Print image stats
-    logger.info("Image shape: {}".format(final_face_pixels.shape))
-    logger.info("Image dtype: {}".format(final_face_pixels.dtype))
-    logger.info("Max pixel value: {}".format(np.max(final_face_pixels)))
-    logger.info("Min pixel value: {}".format(np.min(final_face_pixels)))
-    logger.info("Enhancement process completed.")
+    # logger.info("Image shape: {}".format(final_face_pixels.shape))
+    # logger.info("Image dtype: {}".format(final_face_pixels.dtype))
+    # logger.info("Max pixel value: {}".format(np.max(final_face_pixels)))
+    # logger.info("Min pixel value: {}".format(np.min(final_face_pixels)))
+    # logger.info("Enhancement process completed.")
     return final_face_pixels
 
+def enhance_face(face_pixels, save_dir='tmp'):
+    logger.info("Starting enhancement process for face image.")
+
+    # Check if the save directory exists, if not, create it
+    os.makedirs(save_dir, exist_ok=True)
+
+    # Enhancing the image
+    if face_pixels.shape[0] < 100 or face_pixels.shape[1] < 100:
+        # Assuming sr_model is a pre-defined super-resolution model
+        face_pixels = sr_model.upsample(face_pixels)  # Upsample the image
+        face_pixels = cv2.resize(face_pixels, (200, 200), interpolation=cv2.INTER_CUBIC)
+
+        face_pixels = cv2.fastNlMeansDenoisingColored(face_pixels, None, 10, 10, 7, 21)
+        img_yuv = cv2.cvtColor(face_pixels, cv2.COLOR_BGR2YUV)
+        img_yuv[:, :, 0] = cv2.equalizeHist(img_yuv[:, :, 0])
+        final_face_pixels = cv2.cvtColor(img_yuv, cv2.COLOR_YUV2BGR)
+        # final_face_pixels = cv2.resize(final_face_pixels, (224, 224), interpolation=cv2.INTER_AREA)
+    else:
+        final_face_pixels= face_pixels
+
+    # Generate a unique filename using the current timestamp
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    unique_filename = f"enhanced_face_{timestamp}.png"
+    save_path = os.path.join(save_dir, unique_filename)
+
+    # Save the enhanced image
+    cv2.imwrite(save_path, final_face_pixels)
+    logger.info(f"Enhanced image saved at {save_path}.")
+
+    return final_face_pixels
+    
 def detect_faces(img_cv2, min_size, confidence_threshold):
     start_time = time.time()
     detected_faces = []
@@ -253,7 +284,7 @@ def query_models(faces_df):
     
     return person_df
 
-def elect_answer(person_df, weights=[0.1, 0.3, 0.5], confidence_threshold=0.95):
+def elect_answer_old(person_df, weights=[0.1, 0.3, 0.5], confidence_threshold=0.95):
     start_time = time.time()
     elected_df = person_df.copy()
     
@@ -311,34 +342,107 @@ def elect_answer(person_df, weights=[0.1, 0.3, 0.5], confidence_threshold=0.95):
     
     return elected_df
 
-def elect_answer2(person_df):
+def elect_answer1(person_df, weights=[0.3, 0.5], confidence_threshold=0.95):
     start_time = time.time()
-    elected_df= person_df.copy()
-    # New column for elected label
-    elected_df['elected_label'] = ''    
+    elected_df = person_df.copy()
+    
+    # New columns for elected label and confidence
+    elected_df['elected_label'] = ''
+    elected_df['elected_confidence'] = 0.0
+    
+    # Check if the number of weights matches the number of models
+    if len(weights) != 2:
+        raise ValueError("The number of weights must match the number of models (2).")
+    
     for i, person in elected_df.iterrows():
-        # logger.debug(f"Processing row {i}...")
+        # Filter out models with confidence below the threshold and prepare lists for the ones above the threshold
+        valid_labels = []
+        valid_confidences = []
+        valid_weights = []
+        for model_weight, model in zip(weights, ['resnet50', 'senet50']):
+            if person[f'{model}_confidence'] >= confidence_threshold:
+                valid_labels.append(person[f'{model}_label'])
+                valid_confidences.append(person[f'{model}_confidence'])
+                valid_weights.append(model_weight)
         
-        labels = [person['resnet50_label'], person['senet50_label'], person['vgg16_label']]
-        confidences = [person['resnet50_confidence'], person['senet50_confidence'], person['vgg16_confidence']]        
-        # Count the occurrences of each label
-        label_counts = {label: labels.count(label) for label in labels}
-        # logger.debug(f"label counts: {label_counts}")        
-        # Find the label(s) with the maximum count
-        max_count = max(label_counts.values())
-        max_labels = [label for label, count in label_counts.items() if count == max_count]
-        # logger.debug(f"max labels: {max_labels}")        
-        if len(max_labels) == 1:
-            # If there's one label with the maximum count, use it
-            elected_df.loc[i, 'elected_label'] = max_labels[0]
-        else:
-            # If there's a tie, use the label with the highest average confidence
-            avg_confidences = [np.mean([confidences[j] for j in range(3) if labels[j] == label]) for label in max_labels]
-            elected_df.loc[i, 'elected_label'] = max_labels[np.argmax(avg_confidences)]
-        # logger.debug(f"Elected label for row {i}: {person_df.loc[i, 'elected_label']}")
+        # Skip this person if all models are below the confidence threshold
+        if not valid_labels:
+            logger.debug(f"No models met the confidence threshold for row {i}.")
+            continue
+        
+        # Majority voting mechanism
+        label_counts = Counter(valid_labels)
+        majority_vote_label, _ = label_counts.most_common(1)[0]
+        majority_vote_confidences = [conf for label, conf in zip(valid_labels, valid_confidences) if label == majority_vote_label]
+        majority_vote_confidence = np.mean(majority_vote_confidences)
+        
+        # Weighted voting mechanism
+        valid_weights_np = np.array(valid_weights)
+        valid_confidences_np = np.array(valid_confidences)
+        weighted_confidences = valid_confidences_np * valid_weights_np
+        weighted_vote_label = valid_labels[np.argmax(weighted_confidences)]
+        weighted_vote_confidence = valid_confidences_np[np.argmax(weighted_confidences)]
+        
+        # Choose the label with the highest confidence from either majority or weighted voting
+        final_decision_label = majority_vote_label if majority_vote_confidence > weighted_vote_confidence else weighted_vote_label
+        final_decision_confidence = max(majority_vote_confidence, weighted_vote_confidence)
+
+        # Assign label and confidence to DataFrame
+        elected_df.at[i, 'elected_label'] = final_decision_label
+        elected_df.at[i, 'elected_confidence'] = final_decision_confidence
+
+        logger.debug(f"Elected label for row {i}: {final_decision_label} with confidence {final_decision_confidence}")
+
     logger.info(f"Elected answers for {len(elected_df)} rows in {(time.time() - start_time):.2f} seconds.")
+
+    # Assuming the save_df_to_csv_excluding_columns function has been defined elsewhere and is available
     save_df_to_csv_excluding_columns(elected_df)
+    
     return elected_df
+
+def elect_answer(person_df, confidence_threshold=0.75, csv_filename='elected_labels.csv'):
+    elected_df = person_df.copy()
+
+    # New columns for elected label and confidence
+    elected_df['elected_label'] = ''
+    elected_df['elected_confidence'] = 0.0
+
+    for i, person in elected_df.iterrows():
+        # Collect all labels and confidences
+        labels_and_confidences = [
+            (person['resnet50_label'], person['resnet50_confidence']),
+            (person['senet50_label'], person['senet50_confidence']),
+            # (person['vgg16_label'], person['vgg16_confidence'])
+             
+        ]
+
+        # Sort by confidence in descending order to easily select the highest confidence
+        labels_and_confidences.sort(key=lambda x: x[1], reverse=True)
+
+        # Check for a majority label
+        label_counts = Counter([label for label, _ in labels_and_confidences])
+        majority_vote_label, majority_count = label_counts.most_common(1)[0]
+
+        # If there is a majority
+        if majority_count > 1:
+            majority_confidences = [conf for label, conf in labels_and_confidences if label == majority_vote_label]
+            elected_label = majority_vote_label
+            elected_confidence = np.mean(majority_confidences)
+        else:
+            # No majority, so choose the label with the highest confidence
+            elected_label, elected_confidence = labels_and_confidences[0]
+
+        # Assign the label and confidence to the DataFrame: senet50, resnet50, vgg16
+        elected_df.at[i, 'elected_label'] = person['resnet50_label']# elected_label
+        elected_df.at[i, 'elected_confidence'] = person['resnet50_confidence'] #elected_confidence
+
+    # Save the DataFrame to a CSV file
+    elected_df.to_csv(csv_filename, index=False)
+
+    # Filter the DataFrame based on the confidence threshold
+    filtered_df = elected_df[elected_df['elected_confidence'] >= confidence_threshold]
+
+    return filtered_df
 
 def remove_duplicates(elected):
     start_time = time.time()
@@ -356,33 +460,3 @@ def remove_duplicates(elected):
     save_df_to_csv_excluding_columns(unique_persons)
 
     return unique_persons
-
-    start_time = time.time()
-    logger.debug(f"Total records before removing duplicates: {len(elected)}")
-    
-    # Detect duplicates
-    duplicates = elected[elected.duplicated(subset='elected_label', keep=False)]
-    logger.debug("Duplicates:")
-    logger.debug(duplicates)
-    
-    # Add column for area of bounding box
-    elected['box_area'] = elected['box'].apply(lambda b: b[2]*b[3])
-    
-    # Sort by box_area in descending order so that duplicates with the largest area come first
-    elected.sort_values('box_area', ascending=False, inplace=True)
-    
-    # Remove duplicates, keeping the first one (which, due to the sorting, will be the one with the largest area)
-    unique_persons = elected.drop_duplicates(subset='elected_label')
-    logger.debug(f"Total records after removing duplicates: {len(unique_persons)}")
-    
-    # Split 'elected_label' and create a new column 'name' 
-    unique_persons['fullname'] = unique_persons['elected_label'].apply(lambda x: x.split('_')[1] if x and '_' in x else x)
-    # Sort DataFrame by 'name' in ascending order
-    unique_persons_sorted = unique_persons.sort_values(by='fullname', ascending=True)    
-    logger.debug("Sorted by fullname")
-
-    # Drop the 'box_area' and 'name' column
-    unique_persons_sorted = unique_persons_sorted.drop(columns=['box_area', 'fullname'])      
-    logger.info(f"Duplicates removed and DataFrame sorted in {(time.time() - start_time):.2f} seconds.")
-    save_df_to_csv_excluding_columns(unique_persons_sorted)
-    return unique_persons_sorted
